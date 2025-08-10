@@ -1,577 +1,323 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Greece Official Disaster Map</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Greece Official Disaster Map</title>
 
-  <!-- Leaflet -->
-  <link
-    rel="stylesheet"
-    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
-    crossorigin=""
-  />
-  <script
-    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
-    crossorigin=""
-  ></script>
+<!-- Leaflet -->
+<link
+  rel="stylesheet"
+  href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-  <!-- Optional: PapaParse (not strictly needed when using the Worker, but kept for future) -->
-  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<!-- PapaParse for CSV (kept for future, not required if Worker aggregates) -->
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 
-  <style>
-    :root {
-      --bg: #0f172a;          /* slate-900 */
-      --panel: #111827;       /* gray-900 */
-      --muted: #6b7280;       /* gray-500 */
-      --text: #e5e7eb;        /* gray-200 */
-      --accent: #22c55e;      /* green-500 */
-      --accent-err: #ef4444;  /* red-500 */
-      --accent-warn: #f59e0b; /* amber-500 */
-      --card: #0b1220;        /* deep slate */
-      --chip: #1f2937;        /* gray-800 */
-      --border: #1f2937;      /* gray-800 */
-    }
-
-    * { box-sizing: border-box; }
-    html, body { height: 100%; }
-    body {
-      margin: 0;
-      background: linear-gradient(180deg, #0b1020 0%, #0a0f1e 100%);
-      color: var(--text);
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif;
-    }
-
-    #app {
-      display: grid;
-      grid-template-columns: 360px 1fr;
-      gap: 0;
-      height: 100vh;
-      width: 100vw;
-      overflow: hidden;
-    }
-
-    /* Sidebar */
-    .sidebar {
-      background: rgba(11, 18, 32, 0.9);
-      backdrop-filter: blur(8px);
-      border-right: 1px solid var(--border);
-      padding: 18px 16px;
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-    }
-
-    .brand {
-      display: grid;
-      grid-template-columns: 40px 1fr;
-      gap: 12px;
-      align-items: center;
-      padding: 10px 12px;
-      border-radius: 14px;
-      background:
-        radial-gradient(120px 120px at -20% -20%, rgba(59,130,246,0.18) 0%, rgba(59,130,246,0) 60%),
-        linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.0));
-      border: 1px solid var(--border);
-    }
-    .logo {
-      height: 40px; width: 40px; border-radius: 12px;
-      display: grid; place-items: center;
-      background:
-        radial-gradient(120px 120px at 120% 120%, rgba(16,185,129,0.2) 0%, rgba(16,185,129,0) 60%),
-        #0b1220;
-      border: 1px solid var(--border);
-      color: #93c5fd;
-      font-weight: 800;
-      letter-spacing: -0.02em;
-    }
-    h1 {
-      margin: 0;
-      font-size: 16px;
-      font-weight: 700;
-      letter-spacing: 0.2px;
-    }
-    .sub {
-      margin: 2px 0 0 0;
-      font-size: 12px;
-      color: var(--muted);
-      line-height: 1.35;
-    }
-
-    .panel {
-      border: 1px solid var(--border);
-      background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.00));
-      border-radius: 14px;
-      padding: 12px;
-    }
-    .panel h2 {
-      margin: 0 0 10px 0;
-      font-size: 12px;
-      text-transform: uppercase;
-      letter-spacing: 0.12em;
-      color: #9ca3af;
-    }
-
-    /* Stats */
-    .stats {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 10px;
-    }
-    .stat {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 10px;
-    }
-    .stat .label {
-      font-size: 11px;
-      color: var(--muted);
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-    }
-    .stat .value {
-      margin-top: 6px;
-      font-size: 20px;
-      font-weight: 800;
-      letter-spacing: -0.02em;
-    }
-    .updated {
-      margin-top: 6px;
-      font-size: 11px;
-      color: var(--muted);
-    }
-
-    /* Source statuses */
-    .sources {
-      display: grid;
-      grid-template-columns: 1fr;
-      gap: 6px;
-    }
-    .source-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 8px 10px;
-      font-size: 13px;
-    }
-    .pill {
-      padding: 3px 8px;
-      border-radius: 999px;
-      font-size: 11px;
-      border: 1px solid var(--border);
-      background: var(--chip);
-      color: var(--muted);
-    }
-    .pill.ok { color: #22c55e; border-color: rgba(34,197,94,0.3); }
-    .pill.err { color: #ef4444; border-color: rgba(239,68,68,0.3); }
-    .pill.loading { color: #f59e0b; border-color: rgba(245,158,11,0.3); }
-
-    /* Filters */
-    .filters {
-      display: grid;
-      gap: 10px;
-    }
-    .row {
-      display: flex; gap: 10px; align-items: center;
-    }
-    .row label { font-size: 13px; color: #cbd5e1; }
-    .row input[type="checkbox"] { transform: translateY(1px); }
-    select, button {
-      width: 100%;
-      background: var(--card);
-      color: var(--text);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 8px 10px;
-      font-size: 13px;
-    }
-    button {
-      cursor: pointer;
-      background: linear-gradient(180deg, rgba(34,197,94,0.16), rgba(34,197,94,0.06));
-      border-color: rgba(34,197,94,0.35);
-      font-weight: 600;
-    }
-    button:hover { filter: brightness(1.08); }
-
-    .tiny {
-      margin-top: 8px;
-      font-size: 11px;
-      color: var(--muted);
-      line-height: 1.4;
-    }
-
-    /* Map */
-    #map { width: 100%; height: 100%; }
-
-    /* Small screens */
-    @media (max-width: 900px) {
-      #app { grid-template-columns: 1fr; }
-      .sidebar { height: 56vh; overflow: auto; }
-      #map { height: 44vh; }
-    }
-  </style>
+<style>
+  :root{
+    --bg:#0b1020; --panel:#121a33; --panel2:#0f1730; --muted:#9db0d0;
+    --ok:#19c37d; --err:#ff6b6b; --warn:#ffb020; --text:#e8f0ff;
+    --accent:#2b68ff;
+  }
+  html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,sans-serif}
+  #app{display:grid;grid-template-columns:320px 1fr;height:100%}
+  /* Sidebar */
+  .sidebar{background:linear-gradient(180deg,var(--panel),var(--panel2));padding:14px 14px 18px;border-right:1px solid #1d2650;overflow:auto}
+  .brand{display:flex;gap:10px;align-items:center;margin-bottom:14px}
+  .logo{width:32px;height:32px;border-radius:8px;background:#1e2a56;display:grid;place-items:center;font-weight:700}
+  .muted{color:var(--muted);font-size:12px;line-height:1.35}
+  .card{background:#0e1630;border:1px solid #1b2350;border-radius:14px;padding:10px;margin-bottom:10px}
+  .h6{font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:#bcd0ff;margin:2px 0 8px}
+  .stats{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .stat{background:#0a1229;border:1px solid #18204a;border-radius:12px;padding:10px}
+  .stat .k{font-size:26px;font-weight:800}
+  .rows{display:flex;flex-direction:column;gap:8px}
+  .row{display:flex;align-items:center;justify-content:space-between;background:#0a1229;border:1px solid #18204a;border-radius:12px;padding:8px 10px}
+  .pill{width:10px;height:10px;border-radius:50%;display:inline-block;margin-left:8px;border:1px solid #0003}
+  .ok{background:var(--ok)}
+  .err{background:var(--err)}
+  .warn{background:var(--warn)}
+  .controls{display:flex;flex-direction:column;gap:8px}
+  .inline{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  select,button,input[type="checkbox"]{accent-color:var(--accent)}
+  select{width:100%;background:#09122a;border:1px solid #1a2550;color:var(--text);padding:8px 10px;border-radius:10px}
+  .chk{display:flex;gap:8px;align-items:center}
+  button{background:linear-gradient(180deg,#1f4bff,#1740e0);border:none;color:white;padding:10px;border-radius:12px;font-weight:700;cursor:pointer}
+  button:disabled{opacity:.6;cursor:not-allowed}
+  .small{font-size:11px;color:#8fa6d6}
+  /* Map */
+  #map{height:100%;width:100%}
+  /* Toast */
+  .toast{position:fixed;right:14px;bottom:14px;background:#101a36;border:1px solid #22306b;color:#dbe6ff;padding:10px 12px;border-radius:12px;box-shadow:0 8px 24px #0006;opacity:0;transform:translateY(8px);transition:all .25s}
+  .toast.show{opacity:1;transform:translateY(0)}
+  a, a:visited{color:#9ec2ff}
+</style>
 </head>
 <body>
-  <div id="app">
-    <!-- Sidebar -->
-    <aside class="sidebar">
-      <div class="brand">
-        <div class="logo">GR</div>
-        <div>
-          <h1>Greece Official Disaster Map</h1>
-          <div class="sub">Live earthquakes, fires, and floods for Greece (aggregated via Cloudflare Worker).</div>
-        </div>
+<div id="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="logo">GR</div>
+      <div>
+        <div style="font-weight:800">Greece Official Disaster Map</div>
+        <div class="muted">Live earthquakes, fires, and floods for Greece (aggregated via Cloudflare Worker).</div>
       </div>
+    </div>
 
-      <section class="panel">
-        <h2>Live stats</h2>
-        <div class="stats">
-          <div class="stat">
-            <div class="label">Earthquakes</div>
-            <div class="value" id="eqCount">0</div>
-          </div>
-          <div class="stat">
-            <div class="label">Fires</div>
-            <div class="value" id="fireCount">0</div>
-          </div>
-          <div class="stat">
-            <div class="label">Floods</div>
-            <div class="value" id="floodCount">0</div>
-          </div>
-          <div class="stat">
-            <div class="label">Total</div>
-            <div class="value" id="totalCount">0</div>
-          </div>
+    <div class="card">
+      <div class="h6">Live stats</div>
+      <div class="stats">
+        <div class="stat"><div class="small">EARTHQUAKES</div><div id="quakesCount" class="k">0</div></div>
+        <div class="stat"><div class="small">FIRES</div><div id="firesCount" class="k">0</div></div>
+        <div class="stat"><div class="small">FLOODS</div><div id="floodsCount" class="k">0</div></div>
+        <div class="stat"><div class="small">TOTAL</div><div id="totalCount" class="k">0</div></div>
+      </div>
+      <div class="small" style="margin-top:6px">Updated: <span id="updatedAt">—</span></div>
+    </div>
+
+    <div class="card">
+      <div class="h6">Source status</div>
+      <div class="rows">
+        <div class="row"><span>USGS</span><span><span id="usgsStatus" class="pill warn"></span></span></div>
+        <div class="row"><span>EMSC</span><span><span id="emscStatus" class="pill warn"></span></span></div>
+        <div class="row"><span>NOA</span><span><span id="noaStatus" class="pill warn"></span></span></div>
+        <div class="row"><span>NASA FIRMS (MODIS)</span><span><span id="firmsModisStatus" class="pill warn"></span></span></div>
+        <div class="row"><span>NASA FIRMS (VIIRS)</span><span><span id="firmsViirsStatus" class="pill warn"></span></span></div>
+        <div class="row"><span>EFFIS</span><span><span id="effisStatus" class="pill warn"></span></span></div>
+        <div class="row"><span>GDACS</span><span><span id="gdacsStatus" class="pill warn"></span></span></div>
+        <div class="row"><span>Copernicus EMS</span><span><span id="cemsStatus" class="pill warn"></span></span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="h6">Filters</div>
+      <div class="controls">
+        <div class="inline">
+          <label class="chk"><input id="chkQuakes" type="checkbox" checked>Earthquakes</label>
+          <label class="chk"><input id="chkFires" type="checkbox" checked>Fires</label>
+          <label class="chk"><input id="chkFloods" type="checkbox" checked>Floods</label>
         </div>
-        <div class="updated">Updated: <span id="lastUpdated">—</span></div>
-      </section>
+        <select id="timeRange">
+          <option value="1">Last 24 hours</option>
+          <option value="3">Last 3 days</option>
+          <option value="7">Last 7 days</option>
+          <option value="10">Last 10 days (max)</option>
+        </select>
+        <select id="minMag">
+          <option value="2">Earthquakes: M 2+</option>
+          <option value="3">Earthquakes: M 3+</option>
+          <option value="4">Earthquakes: M 4+</option>
+          <option value="5">Earthquakes: M 5+</option>
+        </select>
+        <button id="refreshBtn">Refresh</button>
+        <div class="small">Data are aggregated by your Cloudflare Worker and refreshed automatically every 10 minutes.</div>
+      </div>
+    </div>
 
-      <section class="panel">
-        <h2>Source status</h2>
-        <div class="sources">
-          <div class="source-row">
-            <span>USGS</span><span class="pill loading" id="status-USGS">…</span>
-          </div>
-          <div class="source-row">
-            <span>EMSC</span><span class="pill loading" id="status-EMSC">…</span>
-          </div>
-          <div class="source-row">
-            <span>NOA</span><span class="pill loading" id="status-NOA">…</span>
-          </div>
-          <div class="source-row">
-            <span>NASA FIRMS (MODIS)</span><span class="pill loading" id="status-FIRMS_MODIS">…</span>
-          </div>
-          <div class="source-row">
-            <span>NASA FIRMS (VIIRS)</span><span class="pill loading" id="status-FIRMS_VIIRS">…</span>
-          </div>
-          <div class="source-row">
-            <span>EFFIS</span><span class="pill loading" id="status-EFFIS">…</span>
-          </div>
-          <div class="source-row">
-            <span>GDACS</span><span class="pill loading" id="status-GDACS">…</span>
-          </div>
-          <div class="source-row">
-            <span>Copernicus EMS</span><span class="pill loading" id="status-CEMS">…</span>
-          </div>
-        </div>
-      </section>
+    <div class="card">
+      <div class="h6">Sources</div>
+      <div class="small">
+        Earthquakes: USGS, EMSC, NOA (if available). Fires: NASA FIRMS (MODIS &amp; VIIRS), EFFIS. Floods: GDACS, Copernicus EMS (if available).<br/>
+        <br/>Worker: <a href="https://greece-disasters.odysseas-3d2.workers.dev/health" target="_blank">/health</a>
+      </div>
+    </div>
 
-      <section class="panel">
-        <h2>Filters</h2>
-        <div class="filters">
-          <div class="row">
-            <label><input type="checkbox" id="filter-quakes" checked /> Earthquakes</label>
-            <label><input type="checkbox" id="filter-fires" checked /> Fires</label>
-            <label><input type="checkbox" id="filter-floods" checked /> Floods</label>
-          </div>
-          <div class="row">
-            <select id="time-period" title="Time period">
-              <option value="24h" selected>Last 24 hours</option>
-              <option value="3d">Last 3 days</option>
-              <option value="7d">Last 7 days</option>
-              <option value="30d">Last 30 days</option>
-              <option value="3m">Last 3 months</option>
-              <option value="1y">Last year</option>
-            </select>
-          </div>
-          <div class="row">
-            <select id="min-mag" title="Minimum magnitude">
-              <option value="2" selected>Earthquakes: M 2+</option>
-              <option value="3">M 3+</option>
-              <option value="4">M 4+</option>
-              <option value="5">M 5+</option>
-            </select>
-          </div>
-          <button id="refresh-btn">Refresh</button>
-          <div class="tiny">
-            Data are aggregated by your Cloudflare Worker and refreshed automatically every 10 minutes.
-          </div>
-        </div>
-      </section>
+  </aside>
 
-      <section class="panel">
-        <h2>Sources</h2>
-        <div class="tiny">
-          Earthquakes: USGS, EMSC, NOA<br/>
-          Fires: NASA FIRMS, EFFIS<br/>
-          Floods: GDACS, Copernicus EMS
-        </div>
-      </section>
-    </aside>
+  <main id="map"></main>
+</div>
 
-    <!-- Map -->
-    <main id="map"></main>
-  </div>
+<div id="toast" class="toast"></div>
 
-  <script>
-    // === REQUIRED KEYS / ENDPOINT ===
-    // Your MapTiler key (you gave me this one)
-    window.MAPTILER_KEY = 'x1Q1SpeI9hPHQaeW1DEa';
-    // Your Cloudflare Worker aggregate endpoint:
-    const WORKER_ENDPOINT = 'https://greece-disasters.odysseas-3d2.workers.dev/aggregate';
-  </script>
+<script>
+/* =======================
+   CONFIG
+   ======================= */
+const MAPTILER_KEY = "x1Q1SpeI9hPHQaeW1DEa";
+const WORKER_BASE  = "https://greece-disasters.odysseas-3d2.workers.dev";
+const API_URL      = WORKER_BASE + "/api";
+const WARM_URL     = WORKER_BASE + "/warm";
 
-  <script>
-  // ====== MAP INIT ======
-  (function initMap() {
-    if (window.map) return;
-    const centerGR = [38.3, 23.7]; // roughly central Greece
-    const map = L.map('map', { zoomControl: true }).setView(centerGR, 6);
-    L.tileLayer(
-      `https://api.maptiler.com/maps/positron/{z}/{x}/{y}.png?key=${window.MAPTILER_KEY}`,
-      {
-        attribution:
-          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://www.maptiler.com/">MapTiler</a>'
-      }
-    ).addTo(map);
+// Greece bounds
+const GR_BOUNDS = [[34.8,19.3],[41.8,29.6]];
 
-    window.earthquakesLayer = L.layerGroup().addTo(map);
-    window.firesLayer = L.layerGroup().addTo(map);
-    window.floodsLayer = L.layerGroup().addTo(map);
+/* =======================
+   MAP
+   ======================= */
+const map = L.map('map', {zoomControl:true,minZoom:5,maxZoom:17});
+map.fitBounds(GR_BOUNDS);
 
-    window.map = map;
-  })();
-  </script>
+const tiles = L.tileLayer(
+  `https://api.maptiler.com/maps/streets-v2/256/{z}/{x}/{y}.png?key=${MAPTILER_KEY}`,
+  { attribution:'&copy; <a href="https://www.maptiler.com/copyright/">MapTiler</a> &copy; OpenStreetMap contributors' }
+).addTo(map);
 
-  <!-- DATA ADAPTER: fetch from Worker and draw -->
-  <script>
-  (() => {
-    const GREECE_BBOX = [19.3, 34.8, 29.6, 41.8]; // [west,south,east,north] required by Worker
-    const AUTO_REFRESH_MS = 10 * 60 * 1000;
+const quakesLayer = L.layerGroup().addTo(map);
+const firesLayer  = L.layerGroup().addTo(map);
+const floodsLayer = L.layerGroup().addTo(map);
 
-    const el = (sel) => document.querySelector(sel);
+/* =======================
+   UI HELPERS
+   ======================= */
+const $ = sel => document.querySelector(sel);
+const ids = id => document.getElementById(id);
 
-    // Filters (read from UI if present)
-    const getDays = () => {
-      const dd = el('#time-period');
-      if (!dd) return 1;
-      const v = dd.value || '24h';
-      const map = { '24h':1, '3d':3, '7d':7, '30d':10, '3m':10, '1y':10 }; // Worker caps FIRMS to <=10
-      return map[v] ?? 1;
-    };
-    const getMinMag = () => {
-      const dd = el('#min-mag');
-      if (!dd) return 2;
-      const m = parseFloat(dd.value);
-      return isFinite(m) ? m : 2;
-    };
+function toast(msg, ms=2600){
+  const t = ids('toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toast._t); toast._t = setTimeout(()=>t.classList.remove('show'), ms);
+}
 
-    // Element refs (optional in UI)
-    const chkQuakes = el('#filter-quakes');
-    const chkFires  = el('#filter-fires');
-    const chkFloods = el('#filter-floods');
+function setSourceStatus(mapStatus){
+  // Earthquakes
+  badge('usgsStatus', mapStatus?.earthquakes?.USGS);
+  badge('emscStatus', mapStatus?.earthquakes?.EMSC);
+  badge('noaStatus',  mapStatus?.earthquakes?.NOA);
+  // Fires
+  badge('firmsModisStatus', mapStatus?.fires?.FIRMS_MODIS);
+  badge('firmsViirsStatus', mapStatus?.fires?.FIRMS_VIIRS);
+  badge('effisStatus',       mapStatus?.fires?.EFFIS);
+  // Floods
+  badge('gdacsStatus', mapStatus?.floods?.GDACS);
+  badge('cemsStatus',  mapStatus?.floods?.CEMS);
+}
 
-    const statEq    = el('#eqCount');
-    const statFi    = el('#fireCount');
-    const statFl    = el('#floodCount');
-    const statTotal = el('#totalCount');
-    const updatedAt = el('#lastUpdated');
+function badge(id, status){
+  const el = ids(id); if(!el) return;
+  el.classList.remove('ok','err','warn');
+  if(status === 'ok') el.classList.add('ok');
+  else if(status === 'error') el.classList.add('err');
+  else el.classList.add('warn'); // loading/skipped/unknown
+}
 
-    const statusEl = (name) => el(`#status-${name}`);
+function setStats(stats, updated){
+  ids('quakesCount').textContent = stats?.earthquakes ?? 0;
+  ids('firesCount').textContent  = stats?.fires ?? 0;
+  ids('floodsCount').textContent = stats?.floods ?? 0;
+  ids('totalCount').textContent  = stats?.total ?? 0;
+  ids('updatedAt').textContent   = updated ? new Date(updated).toLocaleString() : '—';
+}
 
-    function quakeColor(m) {
-      if (m >= 6) return '#d73027';
-      if (m >= 5) return '#f46d43';
-      if (m >= 4) return '#fdae61';
-      if (m >= 3) return '#fee08b';
-      return '#ffffbf';
-    }
-    function toLocal(ts) { try { return new Date(ts).toLocaleString(); } catch { return ''; } }
+function getFilters(){
+  const periodDays = Math.min(10, Number(ids('timeRange').value||1));
+  const minMag = Number((ids('minMag').value||'2').replace(/\D/g,''))||2;
+  return {
+    showQuakes: ids('chkQuakes').checked,
+    showFires:  ids('chkFires').checked,
+    showFloods: ids('chkFloods').checked,
+    periodDays, minMag
+  };
+}
 
-    async function loadData() {
-      setSourceStatusLoading();
+/* =======================
+   DRAW FUNCTIONS
+   ======================= */
+function quakeColor(m){
+  if (m>=5) return '#ff3b3b';
+  if (m>=4) return '#ff7b2f';
+  if (m>=3) return '#ffb32a';
+  return '#ffe14d';
+}
+function drawEarthquakes(arr){
+  quakesLayer.clearLayers();
+  arr.forEach(f=>{
+    const m = Math.max(2, Number(f.mag||0));
+    const c = quakeColor(m);
+    const r = 2 + m * 2.2;
+    const lm = L.circleMarker([f.lat, f.lon], {radius:r,color:c,weight:1,fillColor:c,fillOpacity:.35});
+    const when = f.time ? new Date(f.time).toLocaleString() : '—';
+    const src = Array.isArray(f.sources)? f.sources.join(', ') : (f._src || '—');
+    const place = f.place || '—';
+    const depth = (f.depth!=null)? `${Math.abs(f.depth)} km` : '—';
+    const link = f.url ? `<a href="${f.url}" target="_blank">details</a>` : '';
+    lm.bindPopup(`<b>Magnitude ${m.toFixed(1)}</b><br>Depth: ${depth}<br>${place}<br>${when}<br><small>Sources: ${src} ${link?('· '+link):''}</small>`);
+    quakesLayer.addLayer(lm);
+  });
+}
 
-      const params = new URLSearchParams({
-        bbox: GREECE_BBOX.join(','),
-        days: String(getDays()),
-        minMag: String(getMinMag())
-      });
+function drawFires(arr){
+  firesLayer.clearLayers();
+  arr.forEach(p=>{
+    const when = p.time ? new Date(p.time).toLocaleString() : '—';
+    const conf = (p.conf || '').toString().toUpperCase();
+    const lm = L.circleMarker([p.lat, p.lon], {radius:4,color:'#ff5757',fillColor:'#ff5757',fillOpacity:.55,weight:1});
+    lm.bindPopup(`<b>Active Fire</b><br>Brightness: ${p.bright ?? '—'}<br>Confidence: ${conf || '—'}<br>${when}<br><small>Source: FIRMS</small>`);
+    firesLayer.addLayer(lm);
+  });
+}
 
-      const url = `${WORKER_ENDPOINT}?${params.toString()}`;
-      let json;
-      try {
-        const res = await fetch(url, { cache: 'no-store' });
-        json = await res.json();
-      } catch (e) {
-        console.error('Worker fetch failed', e);
-        setSourceStatusErrorAll();
-        return;
-      }
+function drawFloods(arr){
+  floodsLayer.clearLayers();
+  arr.forEach(p=>{
+    const when = p.time ? new Date(p.time).toLocaleString() : '—';
+    const sev = p.severity || p.alert || '—';
+    const name = p.name || p.place || 'Flood';
+    const lm = L.circleMarker([p.lat, p.lon], {radius:5,color:'#3aa0ff',fillColor:'#3aa0ff',fillOpacity:.45,weight:1});
+    lm.bindPopup(`<b>${name}</b><br>Severity: ${sev}<br>${when}<br><small>Sources: ${(p.sources||[]).join(', ')||'—'}</small>`);
+    floodsLayer.addLayer(lm);
+  });
+}
 
-      // Stats
-      if (json?.stats) {
-        if (statEq)    statEq.textContent    = json.stats.earthquakes ?? 0;
-        if (statFi)    statFi.textContent    = json.stats.fires ?? 0;
-        if (statFl)    statFl.textContent    = json.stats.floods ?? 0;
-        if (statTotal) statTotal.textContent = json.stats.total ?? 0;
-      }
-      if (updatedAt) {
-        updatedAt.textContent = json?.updated ? toLocal(json.updated) : '—';
-      }
+/* =======================
+   DATA FETCH
+   ======================= */
+async function fetchAggregated(periodDays, minMag){
+  const url = `${API_URL}?periodDays=${encodeURIComponent(periodDays)}&minMag=${encodeURIComponent(minMag)}&_=${Date.now()}`;
+  const res = await fetch(url, {cache:'no-store',headers:{'accept':'application/json'}});
+  if(!res.ok) throw new Error(`Worker ${res.status}`);
+  const json = await res.json();
+  if(!json?.ok || !json.data) throw new Error('Unexpected Worker payload');
+  return json;
+}
 
-      // Source statuses
-      if (json?.sources) applySourceStatuses(json.sources);
+async function reload(){
+  const btn = ids('refreshBtn'); btn.disabled = true; btn.textContent = 'Loading…';
+  try{
+    const f = getFilters();
+    const payload = await fetchAggregated(f.periodDays, f.minMag);
 
-      // Draw layers
-      const map = window.map;
-      const eqLayer = window.earthquakesLayer;
-      const fiLayer = window.firesLayer;
-      const flLayer = window.floodsLayer;
+    // Stats & status badges
+    setStats(payload.stats, payload.updated);
+    setSourceStatus(payload.sources);
 
-      eqLayer.clearLayers();
-      fiLayer.clearLayers();
-      flLayer.clearLayers();
+    // Draw layers based on toggles
+    (f.showQuakes ? drawEarthquakes : ()=>quakesLayer.clearLayers())(payload.data.earthquakes || []);
+    (f.showFires  ? drawFires      : ()=>firesLayer.clearLayers())  (payload.data.fires || []);
+    (f.showFloods ? drawFloods     : ()=>floodsLayer.clearLayers()) (payload.data.floods || []);
 
-      const showQuakes = chkQuakes ? chkQuakes.checked : true;
-      const showFires  = chkFires  ? chkFires.checked  : true;
-      const showFloods = chkFloods ? chkFloods.checked : true;
+    // Fit bounds if anything to show
+    const allPts = []
+      .concat((payload.data.earthquakes||[]).map(p=>[p.lat,p.lon]))
+      .concat((payload.data.fires||[]).map(p=>[p.lat,p.lon]))
+      .concat((payload.data.floods||[]).map(p=>[p.lat,p.lon]));
+    if(allPts.length){ map.fitBounds(allPts, {padding:[40,40]}); }
+    else { map.fitBounds(GR_BOUNDS); }
 
-      // Earthquakes
-      (json?.data?.earthquakes || []).forEach(eq => {
-        if (!showQuakes) return;
-        if (typeof eq.lat !== 'number' || typeof eq.lon !== 'number') return;
-        const m = Number(eq.mag) || 0;
-        const marker = L.circleMarker([eq.lat, eq.lon], {
-          radius: Math.max(4, Math.min(14, m * 2.5)),
-          color: quakeColor(m),
-          weight: 1,
-          fillOpacity: 0.7
-        });
-        const srcs = Array.isArray(eq.sources) ? eq.sources.join(', ') : (eq._src || '');
-        marker.bindPopup(`
-          <div style="min-width:210px">
-            <div><strong>M ${m.toFixed(1)}</strong> ${eq.place ? `— ${eq.place}` : ''}</div>
-            <div>Depth: ${eq.depth ?? '—'} km</div>
-            <div>Time: ${toLocal(eq.time)}</div>
-            <div>Sources: ${srcs || '—'}</div>
-            ${eq.url ? `<div><a href="${eq.url}" target="_blank" rel="noopener">Details</a></div>` : ''}
-          </div>
-        `);
-        marker.addTo(eqLayer);
-      });
+  }catch(err){
+    console.error(err);
+    toast('Failed to load data from Worker');
+  }finally{
+    btn.disabled = false; btn.textContent = 'Refresh';
+  }
+}
 
-      // Fires
-      (json?.data?.fires || []).forEach(fi => {
-        if (!showFires) return;
-        if (typeof fi.lat !== 'number' || typeof fi.lon !== 'number') return;
-        const marker = L.circleMarker([fi.lat, fi.lon], {
-          radius: 5,
-          color: '#d7191c',
-          weight: 1,
-          fillOpacity: 0.7
-        });
-        const srcs = Array.isArray(fi.sources) ? fi.sources.join(', ') : 'FIRMS';
-        marker.bindPopup(`
-          <div style="min-width:210px">
-            <div><strong>Active Fire</strong></div>
-            <div>Brightness: ${fi.bright ?? '—'}</div>
-            <div>Confidence: ${fi.conf ?? '—'}</div>
-            <div>Time: ${toLocal(fi.time)}</div>
-            <div>Sources: ${srcs}</div>
-          </div>
-        `);
-        marker.addTo(fiLayer);
-      });
+/* =======================
+   WIRING
+   ======================= */
+ids('refreshBtn').addEventListener('click', reload);
+ids('timeRange').addEventListener('change', reload);
+ids('minMag').addEventListener('change', reload);
+ids('chkQuakes').addEventListener('change', reload);
+ids('chkFires').addEventListener('change', reload);
+ids('chkFloods').addEventListener('change', reload);
 
-      // Floods
-      (json?.data?.floods || []).forEach(fl => {
-        if (!showFloods) return;
-        if (typeof fl.lat !== 'number' || typeof fl.lon !== 'number') return;
-        const marker = L.circleMarker([fl.lat, fl.lon], {
-          radius: 6,
-          color: '#2b83ba',
-          weight: 1,
-          fillOpacity: 0.6
-        });
-        const srcs = Array.isArray(fl.sources) ? fl.sources.join(', ') : 'GDACS';
-        marker.bindPopup(`
-          <div style="min-width:210px">
-            <div><strong>Flood Event</strong></div>
-            <div>Severity: ${fl.severity ?? fl.alert ?? '—'}</div>
-            <div>Time: ${toLocal(fl.time)}</div>
-            <div>Area: ${fl.place ?? fl.name ?? '—'}</div>
-            <div>Sources: ${srcs}</div>
-          </div>
-        `);
-        marker.addTo(flLayer);
-      });
+// Pre-warm the Worker (non-blocking)
+try { fetch(WARM_URL, {mode:'no-cors'}); } catch{}
 
-      // Fit once to available data
-      if (!window.__didFitOnce) {
-        const all = L.featureGroup([eqLayer, fiLayer, flLayer]);
-        try {
-          const b = all.getBounds();
-          if (b.isValid()) {
-            map.fitBounds(b.pad(0.1));
-            window.__didFitOnce = true;
-          }
-        } catch {}
-      }
-    }
-
-    function setSourceStatusLoading(){
-      ['USGS','EMSC','NOA','FIRMS_MODIS','FIRMS_VIIRS','EFFIS','GDACS','CEMS'].forEach(n => {
-        const e = statusEl(n); if (e) { e.textContent = '…'; e.classList.remove('ok','err'); e.classList.add('loading','pill'); }
-      });
-    }
-    function setSourceStatusErrorAll(){
-      ['USGS','EMSC','NOA','FIRMS_MODIS','FIRMS_VIIRS','EFFIS','GDACS','CEMS'].forEach(n => {
-        const e = statusEl(n); if (e) { e.textContent = 'error'; e.classList.remove('ok','loading'); e.classList.add('err','pill'); }
-      });
-    }
-    function applySourceStatuses(sources){
-      sources.earthquakes && Object.entries(sources.earthquakes).forEach(([k,v]) => setStatus(`status-${k}`, v));
-      sources.fires       && Object.entries(sources.fires).forEach(([k,v]) => setStatus(`status-${k}`, v));
-      sources.floods      && Object.entries(sources.floods).forEach(([k,v]) => setStatus(`status-${k}`, v));
-    }
-    function setStatus(id, value){
-      const e = el(`#${id}`) || el(`#${(id||'').toUpperCase()}`);
-      if (!e) return;
-      e.textContent = value;
-      e.classList.remove('ok','err','loading');
-      e.classList.add('pill');
-      if (value === 'ok') e.classList.add('ok');
-      else if (value === 'error') e.classList.add('err');
-      else e.classList.add('loading');
-    }
-
-    // Wire controls
-    const refreshBtn = el('#refresh-btn');
-    refreshBtn && refreshBtn.addEventListener('click', loadData);
-    [el('#time-period'), el('#min-mag'), el('#filter-quakes'), el('#filter-fires'), el('#filter-floods')]
-      .forEach(c => c && c.addEventListener('change', loadData));
-
-    // Kick off
-    loadData();
-    setInterval(loadData, AUTO_REFRESH_MS);
-  })();
-  </script>
+// Initial load + auto-refresh every 10 minutes
+document.addEventListener('DOMContentLoaded', reload);
+setInterval(reload, 10 * 60 * 1000);
+</script>
 </body>
 </html>
