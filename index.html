@@ -5,7 +5,7 @@
   <title>Greece Official Disaster Map</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-  <!-- Leaflet -->
+  <!-- Leaflet + PapaParse (CDN) -->
   <link
     rel="stylesheet"
     href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -17,368 +17,448 @@
     integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
     crossorigin=""
   ></script>
+  <script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
 
   <style>
     :root{
-      --bg:#0f172a;          /* slate-900 */
-      --panel:#0b1224;       /* deep slate */
-      --panel-2:#0e1a34;
-      --text:#e5e7eb;        /* gray-200 */
-      --muted:#9ca3af;       /* gray-400 */
-      --accent:#3b82f6;      /* blue-500 */
-      --good:#22c55e;        /* green-500 */
-      --bad:#ef4444;         /* red-500 */
-      --warn:#f59e0b;        /* amber-500 */
+      --bg:#0b1020; --card:#121933; --accent:#00d1ff; --muted:#9fb0d9; --ok:#22c55e; --err:#ef4444; --warn:#f59e0b;
     }
-    *{box-sizing:border-box}
-    html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif}
-    #app{display:grid;grid-template-columns:310px 1fr;height:100%}
-    aside{
-      background:linear-gradient(180deg,var(--panel),var(--panel-2));
-      border-right:1px solid #162447;
-      padding:12px 12px 14px;
+    html,body { height:100%; margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial; color:#e6ecff; background:var(--bg);}
+    #app { display:grid; grid-template-columns: 360px 1fr; grid-template-rows: 100vh; }
+    /* Sidebar */
+    #sidebar {
+      background: linear-gradient(180deg, #0b1020 0%, #0b1020cc 100%), radial-gradient(1200px 600px at -20% -10%, #1a2a6c33 0%, transparent 60%);
+      border-right: 1px solid #1f2a49;
+      padding: 16px 14px 14px 16px;
       overflow:auto;
     }
-    h1{font-size:14px;margin:0 0 2px;font-weight:700}
-    .sub{font-size:12px;color:var(--muted);margin-bottom:10px}
-    .badge{display:inline-flex;align-items:center;gap:8px;margin-bottom:10px}
-    .logo{width:26px;height:26px;border-radius:50%;background:#22335d;color:#cde3ff;display:inline-grid;place-items:center;font-weight:700}
-    .card{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:10px;padding:10px;margin-bottom:10px}
-    .stats{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-    .kpi{padding:10px;border-radius:10px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06)}
-    .kpi h3{font-size:11px;color:var(--muted);margin:0 0 6px;font-weight:600}
-    .kpi .val{font-size:22px;font-weight:800}
-    .pill{display:flex;align-items:center;justify-content:space-between;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,0.06);background:rgba(255,255,255,0.02);margin-top:8px}
-    .dot{width:10px;height:10px;border-radius:50%;background:#475569;border:1px solid #1f2937}
-    .dot.ok{background:var(--good)}
-    .dot.err{background:var(--bad)}
-    .dot.skip{background:#64748b}
-    .section-title{font-size:11px;color:var(--muted);letter-spacing:.08em;font-weight:700;margin:8px 2px}
-    .filters .row{margin:8px 0}
-    label{font-size:12px;color:var(--muted)}
-    select,button{
-      width:100%;padding:9px 10px;border-radius:10px;border:1px solid #1f2a49;background:#0b1731;color:var(--text);outline:none;
+    .title { font-size:20px; font-weight:700; letter-spacing:.3px; }
+    .subtitle { color: var(--muted); font-size:12px; margin-top:4px; line-height:1.4; }
+    .panel {
+      background: var(--card);
+      border: 1px solid #1f2a49;
+      border-radius: 14px;
+      padding: 12px;
+      margin-top: 12px;
+      box-shadow: 0 6px 20px rgba(0,0,0,.25);
     }
-    button{background:linear-gradient(180deg,#2154c7,#1b47a8);border:1px solid #2b64dc}
-    button:active{transform:translateY(1px)}
-    .sources-note{font-size:11px;color:#8ea0bf}
-    #map{height:100%;width:100%}
-    .footer{font-size:11px;color:#7b8fb7;margin-top:8px}
-    a{color:#93c5fd}
-    .legend{font-size:11px;color:#bfd0ff}
+    .panel h3 { margin:0 0 8px 0; font-size:14px; letter-spacing:.2px; color:#cfe2ff; }
+    .stats { display:grid; grid-template-columns: repeat(4,1fr); gap:8px; }
+    .stat {
+      background:#0f1533;
+      border:1px solid #20305c;
+      border-radius:12px; padding:8px; text-align:center;
+    }
+    .stat .num { font-weight:800; font-size:18px; }
+    .stat .label { font-size:11px; color:var(--muted); }
+    .sources { display:grid; grid-template-columns: 1fr 1fr; gap:8px; }
+    .badge { display:flex; align-items:center; gap:8px; background:#0f1533; border:1px solid #20305c; border-radius:12px; padding:8px; font-size:12px; color:#cfe2ff;}
+    .dot { width:10px; height:10px; border-radius:50%; background:#475569; box-shadow:0 0 0 2px #0b1020 inset;}
+    .dot.ok{ background: var(--ok);}
+    .dot.err{ background: var(--err);}
+    .dot.warn{ background: var(--warn);}
+    .controls { display:grid; gap:10px; }
+    .row { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+    .row .group { display:flex; align-items:center; gap:8px; }
+    .btn {
+      display:inline-flex; align-items:center; justify-content:center; gap:8px;
+      border:1px solid #28427a; background:#0f1533; color:#e6ecff; padding:10px 12px; border-radius:12px;
+      font-weight:600; cursor:pointer;
+    }
+    .btn:hover { border-color:#3a60b8; }
+    select, input[type="checkbox"] {
+      background:#0f1533; color:#e6ecff; border:1px solid #28427a; padding:8px; border-radius:10px;
+    }
+    .small { font-size:12px; color:var(--muted); }
+    /* Map */
+    #map { width:100%; height:100vh; }
+    .leaflet-popup-content { font-size:12px; }
+    .legend { position:absolute; bottom:12px; right:12px; background:#0f1533; border:1px solid #20305c; color:#e6ecff; padding:8px 10px; border-radius:10px; font-size:12px; z-index:500; }
+    .legend div { display:flex; align-items:center; gap:6px; margin:3px 0; }
+    .key { width:10px; height:10px; border-radius:50%; }
+    .key.eq { background:#ff6b00; }
+    .key.fire { background:#ff2d55; }
+    .key.flood { background:#3399ff; }
+    .footer { margin-top:10px; font-size:11px; color:var(--muted); }
+    a, a:visited { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
   </style>
 </head>
 <body>
-  <div id="app">
-    <aside>
-      <div class="badge">
-        <div class="logo">GR</div>
-        <div>
-          <h1>Greece Official Disaster Map</h1>
-          <div class="sub">Live earthquakes, fires, and floods for Greece<br/> (aggregated via Cloudflare Worker).</div>
-        </div>
-      </div>
+<div id="app">
+  <!-- SIDEBAR -->
+  <aside id="sidebar">
+    <div class="title">Greece Official Disaster Map</div>
+    <div class="subtitle">Live earthquakes, fires, and floods across Greece. Data auto-refreshes every 10 minutes.</div>
 
-      <div class="card">
-        <div class="stats">
-          <div class="kpi">
-            <h3>EARTHQUAKES</h3>
-            <div class="val" id="kpi-quakes">0</div>
-          </div>
-          <div class="kpi">
-            <h3>FIRES</h3>
-            <div class="val" id="kpi-fires">0</div>
-          </div>
-          <div class="kpi">
-            <h3>FLOODS</h3>
-            <div class="val" id="kpi-floods">0</div>
-          </div>
-          <div class="kpi">
-            <h3>TOTAL</h3>
-            <div class="val" id="kpi-total">0</div>
-          </div>
-        </div>
-        <div class="footer">Updated: <span id="updated">—</span></div>
+    <div class="panel">
+      <h3>Live Stats</h3>
+      <div class="stats">
+        <div class="stat"><div class="num" id="statEq">0</div><div class="label">Earthquakes</div></div>
+        <div class="stat"><div class="num" id="statFire">0</div><div class="label">Fires</div></div>
+        <div class="stat"><div class="num" id="statFlood">0</div><div class="label">Floods</div></div>
+        <div class="stat"><div class="num" id="statTotal">0</div><div class="label">Total</div></div>
       </div>
+    </div>
 
-      <div class="card">
-        <div class="section-title">SOURCE STATUS</div>
-        <div class="pill"><span>USGS</span><span class="dot" id="src-usgs"></span></div>
-        <div class="pill"><span>EMSC</span><span class="dot" id="src-emsc"></span></div>
-        <div class="pill"><span>NOA</span><span class="dot" id="src-noa"></span></div>
-        <div class="pill"><span>NASA FIRMS (MODIS)</span><span class="dot" id="src-modis"></span></div>
-        <div class="pill"><span>NASA FIRMS (VIIRS)</span><span class="dot" id="src-viirs"></span></div>
-        <div class="pill"><span>EFFIS (Burnt Areas)</span><span class="dot" id="src-effis"></span></div>
-        <div class="pill"><span>GDACS</span><span class="dot" id="src-gdacs"></span></div>
-        <div class="pill"><span>Copernicus EMS</span><span class="dot" id="src-cems"></span></div>
+    <div class="panel">
+      <h3>Source Status</h3>
+      <div class="sources" id="sourceGrid">
+        <!-- Earthquakes -->
+        <div class="badge"><span class="dot" id="srcUSGS"></span>USGS</div>
+        <div class="badge"><span class="dot" id="srcEMSC"></span>EMSC</div>
+        <div class="badge"><span class="dot" id="srcNOA"></span>NOA</div>
+        <!-- Fires -->
+        <div class="badge"><span class="dot" id="srcFIRMS"></span>NASA FIRMS</div>
+        <div class="badge"><span class="dot" id="srcEFFIS"></span>EFFIS</div>
+        <!-- Floods -->
+        <div class="badge"><span class="dot" id="srcGDACS"></span>GDACS</div>
+        <div class="badge"><span class="dot" id="srcCEMS"></span>Copernicus EMS</div>
       </div>
+      <div class="footer small">Green: OK · Yellow: Partial · Red: Error/Skipped</div>
+    </div>
 
-      <div class="card filters">
-        <div class="section-title">FILTERS</div>
+    <div class="panel">
+      <h3>Filters</h3>
+      <div class="controls">
         <div class="row">
-          <input type="checkbox" id="chk-quakes" checked> <label for="chk-quakes">Earthquakes</label>
-          &nbsp;&nbsp;<input type="checkbox" id="chk-fires" checked> <label for="chk-fires">Fires</label>
-          &nbsp;&nbsp;<input type="checkbox" id="chk-floods"> <label for="chk-floods">Floods</label>
+          <div class="group">
+            <label><input type="checkbox" id="chkEq" checked> Earthquakes</label>
+          </div>
+          <div class="group">
+            <label><input type="checkbox" id="chkFire" checked> Fires</label>
+          </div>
+          <div class="group">
+            <label><input type="checkbox" id="chkFlood" checked> Floods</label>
+          </div>
         </div>
         <div class="row">
-          <label for="period">Time period</label>
-          <select id="period">
-            <option value="1">Last 24 hours</option>
-            <option value="3">Last 3 days</option>
-            <option value="7" selected>Last 7 days</option>
-            <option value="10">Last 10 days</option>
+          <div>Time period</div>
+          <select id="selPeriod">
+            <option value="1">24 hours</option>
+            <option value="3">3 days</option>
+            <option value="7" selected>7 days</option>
+            <option value="10">10 days (FIRMS max)</option>
           </select>
         </div>
         <div class="row">
-          <label for="minmag">Earthquakes: Min magnitude</label>
-          <select id="minmag">
-            <option value="0">M 0+</option>
-            <option value="2" selected>M 2+</option>
-            <option value="3">M 3+</option>
-            <option value="4">M 4+</option>
-            <option value="5">M 5+</option>
+          <div>Min magnitude</div>
+          <select id="selMinMag">
+            <option value="2" selected>2+</option>
+            <option value="3">3+</option>
+            <option value="4">4+</option>
+            <option value="5">5+</option>
           </select>
         </div>
-        <button id="btn-refresh">Refresh</button>
-        <div class="footer">Data are aggregated by your Cloudflare Worker<br/>and refreshed automatically every 10 minutes.</div>
-      </div>
-
-      <div class="card">
-        <div class="section-title">SOURCES</div>
-        <div class="sources-note">
-          Earthquakes: USGS, EMSC, NOA (if available).<br/>
-          Fires: NASA FIRMS (MODIS &amp; VIIRS).<br/>
-          Burnt areas: EFFIS (if configured).<br/>
-          Floods: GDACS, Copernicus EMS (when available).<br/>
-          Worker: <a id="worker-health" href="#" target="_blank">/health</a>
+        <div class="row">
+          <button class="btn" id="btnRefresh">Refresh</button>
+          <div class="small" id="lastUpdated">—</div>
         </div>
       </div>
+    </div>
 
-      <div class="legend card">
-        Earthquakes: circle size by magnitude, color from yellow (low) to red (high).<br/>
-        Fires: small orange/red dots (recent detections).<br/>
-        Burnt areas: semi-transparent orange polygons.
+    <div class="panel">
+      <h3>Data Sources</h3>
+      <div class="small">
+        Earthquakes: USGS, EMSC, NOA (if available)<br/>
+        Fires: NASA FIRMS (VIIRS/MODIS)<br/>
+        Floods: GDACS, Copernicus EMS (where accessible)
       </div>
-    </aside>
-    <div id="map"></div>
-  </div>
+    </div>
+  </aside>
 
-  <script>
-    // ====== CONFIG ======
-    // 1) Your MapTiler key (already provided earlier)
-    const MAPTILER_KEY = "x1Q1SpeI9hPHQaeW1DEa";
+  <!-- MAP -->
+  <main id="map"></main>
+</div>
 
-    // 2) Your Cloudflare Worker base URL. Example:
-    //    "https://greece-disasters.<your-subdomain>.workers.dev"
-    // You can also pass it as a query param: ?worker=https://...workers.dev
-    const urlParams = new URLSearchParams(location.search);
-    const WORKER_BASE = urlParams.get("worker") || "https://greece-disasters.odysseas-3d2.workers.dev";
+<div class="legend" id="legend">
+  <div><span class="key eq"></span> Earthquake (size by M)</div>
+  <div><span class="key fire"></span> Fire (FIRMS)</div>
+  <div><span class="key flood"></span> Flood</div>
+</div>
 
-    // BBox for Greece
-    const BOUNDS = [[34.8,19.3],[41.8,29.6]];
+<script>
+  // =========================
+  // Configuration (edit here)
+  // =========================
 
-    // ====== MAP ======
-    const map = L.map('map', {
-      zoomControl: false
-    }).fitBounds(BOUNDS, {padding:[10,10]});
+  // Your Cloudflare Worker base URL:
+  const WORKER_BASE = "https://greece-disasters.odysseas-3d2.workers.dev"; // <— change if yours is different
 
-    L.control.zoom({ position: 'topleft' }).addTo(map);
+  // Optional MapTiler (keeps your visual style). If empty, fallback to OSM tiles.
+  const MAPTILER_KEY = "x1Q1SpeI9hPHQaeW1DEa";
 
-    const tiles = L.tileLayer(
-      `https://api.maptiler.com/maps/streets/256/{z}/{x}/{y}.png?key=${MAPTILER_KEY}`,
-      {
-        attribution:
-          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &nbsp; | &nbsp; Tiles &copy; <a href="https://www.maptiler.com/">MapTiler</a>',
-        maxZoom: 18
-      }
+  // Greece bounds
+  const BOUNDS = [[34.8, 19.3], [41.8, 29.6]];
+
+  // =========================
+  // Map init
+  // =========================
+  const map = L.map('map', {
+    minZoom: 5, maxZoom: 15, zoomControl: true
+  });
+  map.fitBounds(BOUNDS);
+
+  let baseLayer;
+  if (MAPTILER_KEY) {
+    baseLayer = L.tileLayer(
+      `https://api.maptiler.com/maps/streets-v2/256/{z}/{x}/{y}.png?key=${MAPTILER_KEY}`,
+      { attribution: '&copy; MapTiler &copy; OpenStreetMap contributors', tileSize:256, crossOrigin:true }
     ).addTo(map);
+  } else {
+    baseLayer = L.tileLayer(
+      'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+      { attribution: '&copy; OpenStreetMap contributors' }
+    ).addTo(map);
+  }
 
-    // Layers
-    let quakeLayer = L.layerGroup().addTo(map);
-    let fireLayer = L.layerGroup().addTo(map);
-    let floodLayer = L.layerGroup().addTo(map);
-    let burntLayer = L.layerGroup().addTo(map);
+  // Layers
+  const eqLayer = L.layerGroup().addTo(map);
+  const fireLayer = L.layerGroup().addTo(map);
+  const floodLayer = L.layerGroup().addTo(map);
 
-    // ====== UI HOOKS ======
-    const el = (id) => document.getElementById(id);
-    const kpiQuakes = el('kpi-quakes');
-    const kpiFires  = el('kpi-fires');
-    const kpiFloods = el('kpi-floods');
-    const kpiTotal  = el('kpi-total');
-    const updatedEl = el('updated');
+  // =========================
+  // UI Elements
+  // =========================
+  const statEq = document.getElementById('statEq');
+  const statFire = document.getElementById('statFire');
+  const statFlood = document.getElementById('statFlood');
+  const statTotal = document.getElementById('statTotal');
+  const lastUpdated = document.getElementById('lastUpdated');
 
-    const srcUSGS = el('src-usgs');
-    const srcEMSC = el('src-emsc');
-    const srcNOA  = el('src-noa');
-    const srcMODIS= el('src-modis');
-    const srcVIIRS= el('src-viirs');
-    const srcEFFIS= el('src-effis');
-    const srcGDACS= el('src-gdacs');
-    const srcCEMS = el('src-cems');
+  const chkEq = document.getElementById('chkEq');
+  const chkFire = document.getElementById('chkFire');
+  const chkFlood = document.getElementById('chkFlood');
+  const selPeriod = document.getElementById('selPeriod');
+  const selMinMag = document.getElementById('selMinMag');
+  const btnRefresh = document.getElementById('btnRefresh');
 
-    const chkQuakes = el('chk-quakes');
-    const chkFires  = el('chk-fires');
-    const chkFloods = el('chk-floods');
-    const periodSel = el('period');
-    const minMagSel = el('minmag');
-    const refreshBtn= el('btn-refresh');
-    const healthLink = el('worker-health');
+  // Source dots
+  const sUSGS = document.getElementById('srcUSGS');
+  const sEMSC = document.getElementById('srcEMSC');
+  const sNOA = document.getElementById('srcNOA');
+  const sFIRMS = document.getElementById('srcFIRMS');
+  const sEFFIS = document.getElementById('srcEFFIS');
+  const sGDACS = document.getElementById('srcGDACS');
+  const sCEMS = document.getElementById('srcCEMS');
 
-    healthLink.href = WORKER_BASE.replace(/\/+$/,'') + "/health";
+  // =========================
+  // Helpers
+  // =========================
+  function setDot(el, val) {
+    el.classList.remove('ok','err','warn');
+    if (!val) return;
+    const v = String(val).toLowerCase();
+    if (v === 'ok' || v === 'success') el.classList.add('ok');
+    else if (v === 'partial' || v === 'skipped') el.classList.add('warn');
+    else el.classList.add('err');
+  }
 
-    chkQuakes.addEventListener('change', drawAll);
-    chkFires.addEventListener('change', drawAll);
-    chkFloods.addEventListener('change', drawAll);
-    periodSel.addEventListener('change', refresh);
-    minMagSel.addEventListener('change', refresh);
-    refreshBtn.addEventListener('click', refresh);
+  function magColor(m){
+    // yellow (low) → red (high)
+    const c = Math.max(0, Math.min(1, (m - 2) / 4)); // 2..6+
+    const r = Math.round(255 * c);
+    const g = Math.round(255 * (1 - c));
+    return `rgb(${r},${g},0)`;
+  }
 
-    let lastData = null;
+  function fmtTime(ts){
+    const t = (typeof ts === 'string') ? Date.parse(ts) : Number(ts);
+    if (!isFinite(t)) return '—';
+    const d = new Date(t);
+    return d.toLocaleString([], {hour12:false});
+  }
 
-    async function refresh(){
-      const days = Number(periodSel.value || 7);
-      const minMag = Number(minMagSel.value || 2);
+  function withinBounds(lat, lon){
+    return lat >= 34.8 && lat <= 41.8 && lon >= 19.3 && lon <= 29.6;
+  }
 
-      const url = `${WORKER_BASE.replace(/\/+$/,'')}/api?periodDays=${days}&minMag=${minMag}`;
-      setStatusDotsLoading(true);
+  function clearLayers(){
+    eqLayer.clearLayers();
+    fireLayer.clearLayers();
+    floodLayer.clearLayers();
+  }
 
-      try{
-        const r = await fetch(url, { cache: 'no-store' });
-        const data = await r.json();
-        lastData = data;
+  // =========================
+  // Renderers
+  // =========================
+  function renderEarthquakes(list){
+    let count = 0;
+    for (const f of list){
+      const lat = Number(f.lat ?? f.latitude);
+      const lon = Number(f.lon ?? f.longitude);
+      if (!isFinite(lat) || !isFinite(lon)) continue;
+      if (!withinBounds(lat, lon)) continue;
 
-        // KPIs
-        kpiQuakes.textContent = data?.stats?.earthquakes ?? 0;
-        kpiFires.textContent  = data?.stats?.fires ?? 0;
-        kpiFloods.textContent = data?.stats?.floods ?? 0;
-        kpiTotal.textContent  = data?.stats?.total ?? 0;
-        updatedEl.textContent = data?.updated ? new Date(data.updated).toLocaleString() : '—';
+      const m = Number(f.mag ?? f.magnitude ?? 0);
+      const depth = f.depth ?? '—';
+      const when = fmtTime(f.time);
+      const place = f.place || '—';
+      const url = f.url || '';
+      const srcs = Array.isArray(f.sources) ? f.sources.join(', ') : (f._src || '—');
 
-        // Source dots
-        setDot(srcUSGS, statusToClass(data?.sources?.earthquakes?.USGS));
-        setDot(srcEMSC, statusToClass(data?.sources?.earthquakes?.EMSC));
-        setDot(srcNOA,  statusToClass(data?.sources?.earthquakes?.NOA));
-        setDot(srcMODIS,statusToClass(data?.sources?.fires?.FIRMS_MODIS));
-        setDot(srcVIIRS,statusToClass(data?.sources?.fires?.FIRMS_VIIRS));
-        setDot(srcEFFIS,statusToClass(data?.burnt_areas?.EFFIS || data?.sources?.burnt_areas?.EFFIS));
-        setDot(srcGDACS,statusToClass(data?.sources?.floods?.GDACS));
-        setDot(srcCEMS, statusToClass(data?.sources?.floods?.CEMS));
-
-        drawAll();
-      }catch(err){
-        console.error(err);
-        setStatusDotsLoading(false);
-        alert("Failed to fetch data from Worker. Check the Worker URL and CORS.");
-      }
+      const radius = Math.max(4, m * 2.2);
+      const circle = L.circleMarker([lat, lon], {
+        radius,
+        color: magColor(m),
+        weight: 1.5,
+        fillOpacity: 0.55
+      });
+      circle.bindPopup(
+        `<strong>Earthquake</strong><br>
+         Magnitude: <b>${m || '—'}</b><br>
+         Depth: ${depth} km<br>
+         Time: ${when}<br>
+         Place: ${place}<br>
+         Sources: ${srcs}<br>
+         ${url ? `<a href="${url}" target="_blank" rel="noreferrer">Details</a>` : ''}`
+      );
+      circle.addTo(eqLayer);
+      count++;
     }
+    return count;
+  }
 
-    function setStatusDotsLoading(isLoading){
-      const dots = [srcUSGS,srcEMSC,srcNOA,srcMODIS,srcVIIRS,srcEFFIS,srcGDACS,srcCEMS];
-      dots.forEach(d => { if(!d) return; d.className = 'dot'; if(isLoading) d.style.opacity = 0.5; else d.style.opacity = 1; });
+  function renderFires(list){
+    let count = 0;
+    for (const f of list){
+      const lat = Number(f.lat ?? f.latitude);
+      const lon = Number(f.lon ?? f.longitude);
+      if (!isFinite(lat) || !isFinite(lon)) continue;
+      if (!withinBounds(lat, lon)) continue;
+
+      // Handle both old/new field names
+      const brightness = (f.brightness ?? f.bright ?? null);
+      const confidence = (f.confidence ?? f.conf ?? '').toString();
+      const when = fmtTime(f.time);
+
+      const marker = L.circleMarker([lat, lon], {
+        radius: 5,
+        color: '#ff2d55',
+        fillColor: '#ff2d55',
+        weight: 1,
+        fillOpacity: 0.7
+      });
+      marker.bindPopup(
+        `<strong>Fire (FIRMS)</strong><br>
+         Brightness: ${brightness ?? '—'}<br>
+         Confidence: ${confidence || '—'}<br>
+         Time: ${when}`
+      );
+      marker.addTo(fireLayer);
+      count++;
     }
+    return count;
+  }
 
-    function statusToClass(s){
-      if(!s) return 'skip';
-      const v = String(s).toLowerCase();
-      if(v.includes('ok') || v.includes('success')) return 'ok';
-      if(v.includes('skip')) return 'skip';
-      return 'err';
+  function renderFloods(list){
+    let count = 0;
+    for (const f of list){
+      const lat = Number(f.lat ?? f.latitude);
+      const lon = Number(f.lon ?? f.longitude);
+      if (!isFinite(lat) || !isFinite(lon)) continue;
+      if (!withinBounds(lat, lon)) continue;
+
+      const level = f.level ?? f.severity ?? '—';
+      const area = f.area ?? f.name ?? '—';
+      const when = fmtTime(f.time);
+
+      const marker = L.circleMarker([lat, lon], {
+        radius: 6,
+        color: '#3399ff',
+        fillColor: '#3399ff',
+        weight: 1,
+        fillOpacity: 0.6
+      });
+      marker.bindPopup(
+        `<strong>Flood</strong><br>
+         Area: ${area}<br>
+         Level: ${level}<br>
+         Time: ${when}`
+      );
+      marker.addTo(floodLayer);
+      count++;
     }
-    function setDot(el, cls){ if(!el) return; el.className = 'dot ' + (cls || 'skip'); }
+    return count;
+  }
 
-    function drawAll(){
-      quakeLayer.clearLayers();
-      fireLayer.clearLayers();
-      floodLayer.clearLayers();
-      burntLayer.clearLayers();
+  // =========================
+  // Fetch + Wire-up
+  // =========================
+  async function loadAll(){
+    const days = Number(selPeriod.value || 7);
+    const minMag = Number(selMinMag.value || 2);
 
-      if(!lastData) return;
+    // Clamp days for FIRMS (Worker already does this, but keep UI honest)
+    const periodDays = Math.max(1, Math.min(10, days));
 
-      if(chkQuakes.checked){
-        (lastData.data?.earthquakes || []).forEach(q => {
-          const m = q.mag ?? 0;
-          const r = magToRadius(m);
-          const c = magToColor(m);
-          const marker = L.circleMarker([q.lat, q.lon], {
-            radius: r, color: c, fillColor: c, fillOpacity: 0.35, weight: 1
-          }).bindPopup(`
-            <b>M ${fmt(m)} – ${escapeHtml(q.place || '—')}</b><br/>
-            Depth: ${q.depth != null ? q.depth+' km' : '—'}<br/>
-            Time: ${q.time ? new Date(q.time).toLocaleString() : '—'}<br/>
-            Sources: ${(q.sources||[]).join(', ')}<br/>
-            ${q.url ? `<a href="${q.url}" target="_blank">Details</a>` : ``}
-          `);
-          marker.addTo(quakeLayer);
-        });
-      }
+    const url = `${WORKER_BASE}/api?periodDays=${encodeURIComponent(periodDays)}&minMag=${encodeURIComponent(minMag)}`;
+    try{
+      btnRefresh.disabled = true;
+      btnRefresh.textContent = 'Loading…';
 
-      if(chkFires.checked){
-        (lastData.data?.fires || []).forEach(f => {
-          const c = fireColor(f.bright);
-          const marker = L.circleMarker([f.lat, f.lon], {
-            radius: 4, color: c, fillColor: c, fillOpacity: 0.6, weight: 0.5
-          }).bindPopup(`
-            <b>Fire detection</b><br/>
-            Brightness: ${fmt(f.bright)}<br/>
-            Confidence: ${escapeHtml(f.conf || '—')}<br/>
-            Time (UTC): ${f.time ? new Date(f.time).toLocaleString() : '—'}<br/>
-            Sources: ${(f.sources||[]).join(', ')}
-          `);
-          marker.addTo(fireLayer);
-        });
-      }
+      const res = await fetch(url, { headers: { 'accept':'application/json' }, cache: 'no-store' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const payload = await res.json();
 
-      // Floods placeholder: none yet.
+      // Stats
+      const eq = Array.isArray(payload.data?.earthquakes) ? payload.data.earthquakes : [];
+      const fires = Array.isArray(payload.data?.fires) ? payload.data.fires : [];
+      const floods = Array.isArray(payload.data?.floods) ? payload.data.floods : [];
 
-      // Burnt areas polygons (optional)
-      const polys = lastData.data?.burnt_areas || [];
-      if(polys.length){
-        polys.forEach(b => {
-          if(!b.geom) return;
-          const poly = L.geoJSON(b.geom, {
-            style: {
-              color:'#ea580c', weight:1, fillColor:'#f97316', fillOpacity:0.25
-            }
-          }).bindPopup(`
-            <b>Burnt area</b><br/>
-            Area (ha): ${fmt(b.areaHa)}<br/>
-            Date: ${b.date ? new Date(b.date).toLocaleDateString() : '—'}<br/>
-            Source: EFFIS
-          `);
-          poly.addTo(burntLayer);
-        });
-      }
+      // Clear and render
+      clearLayers();
+      const eqCount = renderEarthquakes(eq);
+      const fireCount = renderFires(fires);
+      const floodCount = renderFloods(floods);
+
+      statEq.textContent = eqCount;
+      statFire.textContent = fireCount;
+      statFlood.textContent = floodCount;
+      statTotal.textContent = (eqCount + fireCount + floodCount);
+
+      lastUpdated.textContent = payload.updated ? new Date(payload.updated).toLocaleString([], {hour12:false}) : 'now';
+
+      // Source dots
+      const src = payload.sources || {};
+      const sEq = src.earthquakes || {};
+      const sFi = src.fires || {};
+      const sFl = src.floods || {};
+      setDot(sUSGS, sEq.USGS);
+      setDot(sEMSC, sEq.EMSC);
+      setDot(sNOA, sEq.NOA);
+      // Any FIRMS product OK → green; otherwise reflect first
+      const firmsOverall = (sFi.FIRMS_MODIS === 'ok' || sFi.FIRMS_VIIRS === 'ok') ? 'ok' : (sFi.FIRMS_MODIS || sFi.FIRMS_VIIRS || 'skipped');
+      setDot(sFIRMS, firmsOverall);
+      setDot(sEFFIS, sFi.EFFIS || 'skipped');
+      setDot(sGDACS, sFl.GDACS || 'skipped');
+      setDot(sCEMS, sFl.CEMS || 'skipped');
+
+      // Apply toggles
+      if (!chkEq.checked) map.removeLayer(eqLayer); else eqLayer.addTo(map);
+      if (!chkFire.checked) map.removeLayer(fireLayer); else fireLayer.addTo(map);
+      if (!chkFlood.checked) map.removeLayer(floodLayer); else floodLayer.addTo(map);
+
+    } catch(err){
+      console.error('Load failed:', err);
+      btnRefresh.textContent = 'Retry';
+    } finally {
+      btnRefresh.disabled = false;
+      if (btnRefresh.textContent === 'Loading…') btnRefresh.textContent = 'Refresh';
     }
+  }
 
-    // Helpers
-    function magToRadius(m){
-      // Soft scale: M2=4px, M3=6px, M4=8px, M5=12px, M6+=16px
-      return Math.max(3, Math.min(16, 2 + m*2));
-    }
-    function magToColor(m){
-      // Yellow -> Orange -> Red
-      if(m >= 5) return '#ef4444';
-      if(m >= 4) return '#f59e0b';
-      return '#facc15';
-    }
-    function fireColor(br){
-      if(br == null) return '#fb923c';
-      if(br >= 330) return '#ef4444';
-      if(br >= 310) return '#f97316';
-      return '#fb923c';
-    }
-    function fmt(v){
-      if(v == null || Number.isNaN(Number(v))) return '—';
-      const n = Number(v);
-      return Math.abs(n) >= 100 ? Math.round(n) : (Math.round(n*10)/10);
-    }
-    function escapeHtml(s){
-      return String(s).replace(/[&<>"']/g,(m)=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;' }[m]));
-    }
+  // Events
+  btnRefresh.addEventListener('click', loadAll);
+  selPeriod.addEventListener('change', loadAll);
+  selMinMag.addEventListener('change', loadAll);
+  chkEq.addEventListener('change', () => { if (chkEq.checked) eqLayer.addTo(map); else map.removeLayer(eqLayer); });
+  chkFire.addEventListener('change', () => { if (chkFire.checked) fireLayer.addTo(map); else map.removeLayer(fireLayer); });
+  chkFlood.addEventListener('change', () => { if (chkFlood.checked) floodLayer.addTo(map); else map.removeLayer(floodLayer); });
 
-    // Auto-refresh every 10 minutes
-    refresh();
-    setInterval(refresh, 10*60*1000);
-  </script>
+  // Initial + auto refresh
+  loadAll();
+  setInterval(loadAll, 10 * 60 * 1000); // 10 minutes
+</script>
 </body>
 </html>
