@@ -30,10 +30,11 @@
     html, body { height:100%; margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji"; background:var(--bg); color:var(--text); }
     #app { display:flex; height:100%; }
     #sidebar {
-      width:260px; min-width:260px; max-width:320px;
-      background:var(--panel); padding:12px 12px 16px; box-sizing:border-box; overflow:auto; border-right:1px solid #0b141c;
+      width:280px; min-width:260px; max-width:340px;
+      background:var(--panel); padding:12px 12px 56px; box-sizing:border-box; overflow:auto; border-right:1px solid #0b141c; position:relative;
     }
     #map { flex:1; }
+
     h1 { font-size:16px; margin:4px 0 6px; }
     .sub { font-size:12px; color:var(--muted); line-height:1.35; margin-bottom:10px; }
     .grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px; }
@@ -42,20 +43,37 @@
     }
     .k { font-size:12px; color:var(--muted); }
     .v { font-size:20px; font-weight:700; margin-top:2px; }
-    .row { display:flex; align-items:center; gap:8px; margin:8px 0; }
+    .row { display:flex; align-items:center; gap:8px; margin:8px 0; flex-wrap:wrap; }
     .muted { color:var(--muted); font-size:12px; }
-    .controls label { font-size:13px; margin-right:8px; }
+    .controls label { font-size:13px; margin-right:8px; white-space:nowrap; }
     select, button {
       background:#0a141c; color:var(--text); border:1px solid #0b141c; border-radius:6px; padding:6px 8px; font-size:13px;
     }
     button { cursor:pointer; }
     .legend { font-size:12px; color:var(--muted); margin-top:10px; }
-    .status-dot { width:8px; height:8px; border-radius:50%; display:inline-block; margin-right:6px; }
+    .status-dot { width:8px; height:8px; border-radius:50%; display:inline-block; margin-right:6px; vertical-align:middle; }
     .ok { background:var(--green); } .err { background:var(--red); }
     .updated { font-size:12px; color:var(--muted); }
     .divider { height:1px; background:#0b141c; margin:10px 0; }
 
-    /* Leaflet tweaks (better for dark background) */
+    /* Data sources list */
+    .sources { margin-top:6px; }
+    .sources h3 { font-size:12px; color:#b9cedf; margin:6px 0; text-transform:uppercase; letter-spacing:.06em; }
+    .sources ul { list-style:none; padding-left:0; margin:6px 0; }
+    .sources li { display:flex; align-items:center; gap:6px; padding:4px 0; font-size:13px; color:#d8e6f3; }
+    .sources small { color:var(--muted); margin-left:auto; }
+
+    /* Footer */
+    .footer {
+      position:sticky; bottom:0; left:0; right:0;
+      background:linear-gradient(180deg, rgba(16,24,32,0) 0%, #0e1821 40%);
+      padding:10px 4px 8px; margin-top:12px;
+      font-size:12px; color:var(--muted);
+    }
+    .footer a { color:#cde6ff; text-decoration:none; }
+    .footer a:hover { text-decoration:underline; }
+
+    /* Leaflet tweaks */
     .leaflet-control-zoom a { background:#0a141c; color:#fff; border:none; }
     .leaflet-control-zoom a:hover { background:#13202b; }
   </style>
@@ -114,13 +132,20 @@
 
     <div class="divider"></div>
 
-    <div class="legend">
-      <div><span class="status-dot ok"></span>API reachable</div>
-      <div><span class="status-dot err"></span>API error</div>
-      <div style="margin-top:8px;">
-        • Earthquakes API • Fires API
+    <!-- Data sources with status bullets -->
+    <div class="sources">
+      <h3>Data sources</h3>
+      <ul id="source-list">
+        <!-- filled by JS -->
+      </ul>
+      <div class="legend">
+        <div><span class="status-dot ok"></span>Source contributed data</div>
+        <div><span class="status-dot err"></span>No data from source</div>
       </div>
-      <div style="margin-top:8px;">© Live, client-side map. Built with Leaflet.</div>
+    </div>
+
+    <div class="footer">
+      map built by <a href="https://www.holy.gd" target="_blank" rel="noopener">HØLY</a>
     </div>
   </aside>
 
@@ -154,6 +179,7 @@
   const statFires  = $('#stat-fires');
   const statTotal  = $('#stat-total');
   const lastUpdated = $('#last-updated');
+  const sourceList = $('#source-list');
 
   // Inputs
   const showQuakes = $('#show-quakes');
@@ -174,7 +200,6 @@
   let _quakesFiltered = [], _firesFiltered = [];
 
   function toMs(t) {
-    // Worker may return number (ms) or ISO string; normalize
     if (typeof t === 'number') return t;
     const parsed = Date.parse(t);
     return Number.isFinite(parsed) ? parsed : 0;
@@ -200,7 +225,6 @@
   }
 
   function quakeColor(m) {
-    // yellow -> red scale
     const clamped = Math.max(2, Math.min(6.5, m || 0));
     const t = (clamped - 2) / 4.5; // 0..1
     const r = Math.round(255 * t);
@@ -209,8 +233,7 @@
   }
 
   function quakeRadius(m) {
-    // perceptual-ish
-    return 3 + Math.pow(Math.max(0, m), 1.8);
+    return 6 + Math.pow(Math.max(0, m), 1.6); // a bit larger for label
   }
 
   function fireColor(verified) {
@@ -219,7 +242,7 @@
 
   function fireRadius(brightness) {
     const b = Number(brightness) || 0;
-    return 3 + Math.min(10, (b - 300) / 8); // small tweak
+    return 4 + Math.min(10, (b - 300) / 8);
   }
 
   function updateStats() {
@@ -231,19 +254,35 @@
     lastUpdated.textContent = new Date().toLocaleTimeString([], { hour12:false });
   }
 
+  // --------- Custom quake marker with magnitude label ----------
+  function makeQuakeIcon(mag) {
+    const m = Number(mag) || 0;
+    const size = Math.round(quakeRadius(m) * 2);     // px
+    const color = quakeColor(m);
+    const font = 10; // px as requested
+    const style = `
+      width:${size}px;height:${size}px;
+      border-radius:50%;
+      background:${color};
+      color:#fff;
+      display:flex;align-items:center;justify-content:center;
+      font-weight:700;font-size:${font}px;line-height:1;
+      border:1px solid rgba(0,0,0,.35);
+      box-shadow:0 0 0 1px rgba(0,0,0,.15), 0 1px 4px rgba(0,0,0,.35);
+    `;
+    const html = `<div style="${style}">${m.toFixed(1)}</div>`;
+    return L.divIcon({ html, className:'', iconSize:[size,size], iconAnchor:[size/2,size/2] });
+  }
+  // ------------------------------------------------------------
+
   function drawQuakes(quakes) {
     if (!showQuakes.checked) return;
     for (const e of quakes) {
-      const lat = e.lat, lon = e.lon;
+      const { lat, lon } = e;
       if (!withinGreece(lat, lon)) continue;
 
       const mag = Number(e.mag) || 0;
-      const color = quakeColor(mag);
-      const radius = quakeRadius(mag);
-
-      const marker = L.circleMarker([lat, lon], {
-        radius, color, weight:1, fillColor: color, fillOpacity:0.6
-      });
+      const marker = L.marker([lat, lon], { icon: makeQuakeIcon(mag) });
 
       const timeMs = toMs(e.time);
       const place = e.place || '—';
@@ -265,7 +304,7 @@
   function drawFires(fires) {
     if (!showFires.checked) return;
     for (const f of fires) {
-      const lat = f.lat, lon = f.lon;
+      const { lat, lon } = f;
       if (!withinGreece(lat, lon)) continue;
 
       const color = fireColor(!!f.verified);
@@ -288,6 +327,48 @@
     }
   }
 
+  // Build "did this source contribute data?" map for UI bullets
+  function updateSourcesUI() {
+    // Normalize names we display
+    const sourceKeys = [
+      {key:'USGS', label:'USGS (Earthquakes)'},
+      {key:'EMSC', label:'EMSC (Earthquakes)'},
+      {key:'NOA',  label:'NOA (Earthquakes)'},
+      {key:'FIRMS', label:'NASA FIRMS (Fires)'},     // aggregate of VIIRS/MODIS below
+      {key:'EFFIS', label:'EFFIS (Fires)'}
+    ];
+
+    // Scan filtered data for contributions
+    const contributed = {};
+    for (const e of _quakesFiltered) {
+      const ss = Array.isArray(e.sources) ? e.sources : [e._src].filter(Boolean);
+      if (ss.includes('USGS')) contributed['USGS'] = true;
+      if (ss.includes('EMSC')) contributed['EMSC'] = true;
+      if (ss.includes('NOA'))  contributed['NOA']  = true;
+    }
+    for (const f of _firesFiltered) {
+      const ss = Array.isArray(f.sources) ? f.sources : [f._src].filter(Boolean);
+      // Any VIIRS/MODIS implies FIRMS feed contributed
+      if (ss.some(s => /VIIRS|MODIS/i.test(s))) contributed['FIRMS'] = true;
+      if (ss.includes('EFFIS')) contributed['EFFIS'] = true;
+    }
+
+    sourceList.innerHTML = '';
+    for (const {key,label} of sourceKeys) {
+      const ok = !!contributed[key];
+      const li = document.createElement('li');
+      const dot = document.createElement('span');
+      dot.className = 'status-dot ' + (ok ? 'ok' : 'err');
+      const txt = document.createElement('span');
+      txt.textContent = label;
+      const tail = document.createElement('small');
+      tail.textContent = ok ? 'data present' : 'no data';
+
+      li.appendChild(dot); li.appendChild(txt); li.appendChild(tail);
+      sourceList.appendChild(li);
+    }
+  }
+
   function applyFilters() {
     const days = Number(timeRange.value);
     const minMag = Number(minMagSel.value);
@@ -306,41 +387,33 @@
     drawQuakes(_quakesFiltered);
     drawFires(_firesFiltered);
     updateStats();
+    updateSourcesUI();
   }
 
   async function refresh(force = false) {
     const days = Number(timeRange.value);
     const minMag = Number(minMagSel.value);
-
-    // Build URLs with explicit params so time range ALWAYS flows through.
-    // Adding a small cache-buster when "force" to bypass any browser cache layer.
     const buster = force ? `&t=${Date.now()}` : '';
     const quakesUrl = `${API_BASE}/api/earthquakes?days=${days}&minMag=${minMag}${buster}`;
     const firesUrl  = `${API_BASE}/api/fires?days=${days}${buster}`;
 
     try {
-      const [q, f] = await Promise.all([
-        fetchJSON(quakesUrl),
-        fetchJSON(firesUrl)
-      ]);
+      const [q, f] = await Promise.allSettled([ fetchJSON(quakesUrl), fetchJSON(firesUrl) ]);
 
-      // Worker payloads: { ok, count, data:[...] }
-      _quakesRaw = Array.isArray(q?.data) ? q.data : [];
-      _firesRaw  = Array.isArray(f?.data) ? f.data : [];
+      if (q.status === 'fulfilled') _quakesRaw = Array.isArray(q.value?.data) ? q.value.data : [];
+      if (f.status === 'fulfilled') _firesRaw  = Array.isArray(f.value?.data) ? f.value.data : [];
 
-      applyFilters(); // client-side cutoff too (defensive & instant UI)
+      applyFilters();
     } catch (err) {
       console.error('Fetch error:', err);
-      // Keep existing layers, but update timestamp so you see an attempt happened
       lastUpdated.textContent = new Date().toLocaleTimeString([], { hour12:false });
     }
   }
 
-  // Initial load + auto-refresh every 10 minutes
+  // Initial load + auto-refresh
   refresh(true);
   setInterval(() => refresh(false), 10 * 60 * 1000);
 
-  // Fit bounds to Greece on first interaction
   map.fitBounds([[GRC_BBOX.south, GRC_BBOX.west],[GRC_BBOX.north, GRC_BBOX.east]]);
 </script>
 </body>
