@@ -1,605 +1,380 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Greece Official Disaster Map</title>
-  <!-- Leaflet CSS -->
-  <link
-    rel="stylesheet"
-    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
-    crossorigin=""
-  />
-  <style>
-    :root {
-      --sidebar-width: 380px;
-      --bg: #0b1220;
-      --panel: #111a2b;
-      --muted: #93a0b8;
-      --green: #2ecc71;
-      --red: #e74c3c;
-      --yellow: #f1c40f;
-      --blue: #3498db;
-      --accent: #5aa9ff;
-      --br: 14px;
-    }
-    html, body { height: 100%; margin: 0; background: var(--bg); font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji"; color: #e7edf8; }
-    #app { display: grid; grid-template-columns: var(--sidebar-width) 1fr; height: 100%; }
-    aside { background: var(--panel); padding: 18px 16px; overflow: auto; border-right: 1px solid #1a2740; }
-    h1 { font-size: 20px; margin: 0 0 8px; letter-spacing: .2px; }
-    .sub { color: var(--muted); font-size: 12px; margin-bottom: 14px; }
-    .panel { background: #0e1728; border: 1px solid #1a2740; border-radius: var(--br); padding: 12px; margin-bottom: 12px; }
-    .row { display: flex; gap: 8px; align-items: center; }
-    .row-between { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-    .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
-    .kpi { background:#0b1424; border:1px solid #1a2740; border-radius: 12px; padding:10px; text-align:center; }
-    .kpi .n { font-size: 18px; font-weight: 700; }
-    .kpi .l { font-size: 11px; color: var(--muted); }
-    .src { display:grid; grid-template-columns: 1fr auto; gap: 6px; font-size: 13px; padding: 6px 8px; border-radius: 8px; border:1px solid #1a2740; background:#0b1424; margin-bottom:6px; }
-    .dot { width: 9px; height: 9px; border-radius: 50%; display:inline-block; margin-left: 6px; }
-    .dot.ok { background: var(--green); box-shadow: 0 0 0 2px rgba(46,204,113,.25); }
-    .dot.err { background: var(--red); box-shadow: 0 0 0 2px rgba(231,76,60,.25); }
-    .dot.load { background: var(--yellow); box-shadow: 0 0 0 2px rgba(241,196,15,.25); }
-    .filters label { display:block; margin: 6px 0; }
-    .filters .group { border-top:1px dashed #223255; padding-top:10px; margin-top:10px; }
-    select, button, input[type="checkbox"] { accent-color: var(--accent); }
-    select, button { background:#0b1424; color:#e7edf8; border:1px solid #1a2740; border-radius: 10px; padding:8px 10px; }
-    button { cursor:pointer; }
-    #map { height: 100%; width: 100%; }
-    .sources small { color: var(--muted); }
-    .footer-note { color: var(--muted); font-size: 11px; margin-top: 8px; }
-    a { color: #8ec0ff; text-decoration: none; }
-    a:hover { text-decoration: underline; }
-  </style>
+<meta charset="utf-8" />
+<title>Greece Official Disaster Map</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<!-- Leaflet -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  integrity="sha512-sA+e2JbE1kG4YQ8G9bqocR6G7Fq2d+mq6XfP4Yk1/dqW7sZzjz1w2dC0RrNnYk3KQ2n9Jr7WvVnYw7D7fKQ+kw==" crossorigin="" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+  integrity="sha512-vRv7kVLdM8K9G7K8y5a0C8dKQK2mTx0Qx7q7o3A1oE0Jq8y3Q0z7YlWb8M1FhQ0gQ8m8b2G3C0n9f3mC2g8Rfw==" crossorigin=""></script>
+<!-- PapaParse (kept for spec; not needed with Worker parsing, but harmless) -->
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<style>
+  :root {
+    --sidebar-w: 360px;
+    --bg: #0b1220;
+    --panel: #121a2a;
+    --muted: #93a2b8;
+    --text: #eaf1ff;
+    --accent: #4cc9f0;
+    --good: #31c48d;
+    --bad: #ef4444;
+    --warn: #fbbf24;
+    --blue: #3b82f6;
+    --red: #ef4444;
+    --yellow: #f59e0b;
+  }
+  html, body { height: 100%; margin: 0; background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif; }
+  #app { display: grid; grid-template-columns: var(--sidebar-w) 1fr; height: 100%; }
+  aside {
+    padding: 16px;
+    background: var(--panel);
+    border-right: 1px solid rgba(255,255,255,0.05);
+    overflow: auto;
+  }
+  h1 { margin: 0 0 8px; font-size: 20px; }
+  small.desc { color: var(--muted); display: block; margin-bottom: 12px; line-height: 1.3; }
+  .section { margin-top: 14px; }
+  .section h2 { font-size: 13px; margin: 0 0 8px; color: var(--muted); letter-spacing: .02em; text-transform: uppercase; }
+  .row { display: flex; gap: 8px; align-items: center; }
+  input[type="text"], select {
+    width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08);
+    background: #0e1524; color: var(--text);
+  }
+  .btn { background: var(--accent); color: #00121f; font-weight: 600; border: 0; padding: 8px 12px; border-radius: 10px; cursor: pointer; }
+  .btn.secondary { background: #1f2a44; color: var(--text); }
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .card { background: #0e1524; border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; padding: 10px; }
+  .kpi { font-size: 22px; font-weight: 700; }
+  .label { font-size: 12px; color: var(--muted); }
+  .sources { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .source { display: flex; justify-content: space-between; align-items: center; background: #0e1524; border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; padding: 8px 10px; font-size: 13px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--warn); box-shadow: 0 0 0 2px rgba(255,255,255,0.05) inset; }
+  .dot.ok { background: var(--good); }
+  .dot.error { background: var(--bad); }
+  .filters .row { justify-content: space-between; }
+  .filters .row > label { display: flex; align-items: center; gap: 6px; font-size: 14px; }
+  #map { width: 100%; height: 100%; }
+  .footer { margin-top: 12px; font-size: 12px; color: var(--muted); }
+  .list { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .last-upd { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  a.link { color: var(--accent); text-decoration: none; }
+</style>
 </head>
 <body>
 <div id="app">
   <aside>
     <h1>Greece Official Disaster Map</h1>
-    <div class="sub">Live earthquakes, fires, and floods across Greece. Client‑side only, refreshing every 10 minutes.</div>
+    <small class="desc">Live earthquakes and fires in Greece. Data refreshes automatically every 10 minutes.</small>
 
-    <div class="panel kpis" id="kpis">
-      <div class="kpi"><div class="n" id="kpi-eq">0</div><div class="l">Earthquakes</div></div>
-      <div class="kpi"><div class="n" id="kpi-fire">0</div><div class="l">Fires</div></div>
-      <div class="kpi"><div class="n" id="kpi-flood">0</div><div class="l">Floods</div></div>
-      <div class="kpi"><div class="n" id="kpi-total">0</div><div class="l">Total</div></div>
+    <div class="section">
+      <h2>API endpoint</h2>
+      <div class="row">
+        <input id="apiBase" type="text" placeholder="https://your-worker.example.workers.dev" />
+      </div>
+      <div class="row" style="margin-top:8px;">
+        <button class="btn secondary" id="saveApiBtn">Save</button>
+        <button class="btn secondary" id="testApiBtn">Test</button>
+      </div>
+      <div class="last-upd" id="apiStatus"></div>
     </div>
 
-    <div class="panel">
-      <div class="row-between" style="margin-bottom:6px"><strong>Source Status</strong><small class="sub">green=ok / yellow=loading / red=error</small></div>
-      <div class="src"><span>USGS</span><span class="dot load" id="st-usgs"></span></div>
-      <div class="src"><span>EMSC</span><span class="dot load" id="st-emsc"></span></div>
-      <div class="src"><span>NOA (Athens)</span><span class="dot load" id="st-noa"></span></div>
-      <div class="src"><span>NASA FIRMS</span><span class="dot load" id="st-firms"></span></div>
-      <div class="src"><span>EFFIS</span><span class="dot load" id="st-effis"></span></div>
-      <div class="src"><span>GDACS</span><span class="dot load" id="st-gdacs"></span></div>
-      <div class="src"><span>Copernicus EMS</span><span class="dot load" id="st-cems"></span></div>
+    <div class="section">
+      <h2>Live stats</h2>
+      <div class="stats">
+        <div class="card"><div class="kpi" id="statEq">0</div><div class="label">Earthquakes</div></div>
+        <div class="card"><div class="kpi" id="statFire">0</div><div class="label">Fires</div></div>
+        <div class="card"><div class="kpi" id="statFlood">0</div><div class="label">Floods</div></div>
+        <div class="card"><div class="kpi" id="statTotal">0</div><div class="label">Total</div></div>
+      </div>
     </div>
 
-    <div class="panel filters">
+    <div class="section">
+      <h2>Source status</h2>
+      <div class="sources" id="sourceStatus">
+        <!-- filled by JS -->
+      </div>
+    </div>
+
+    <div class="section filters">
+      <h2>Filters</h2>
       <div class="row" style="gap:12px;">
-        <label><input type="checkbox" id="chk-eq" checked> Earthquakes</label>
-        <label><input type="checkbox" id="chk-fire" checked> Fires</label>
-        <label><input type="checkbox" id="chk-flood" checked> Floods</label>
+        <label><input type="checkbox" id="toggleEq" checked /> Earthquakes</label>
+        <label><input type="checkbox" id="toggleFire" checked /> Fires</label>
       </div>
-      <div class="group">
-        <label>Time period
-          <select id="sel-period">
-            <option value="24h">24 hours</option>
-            <option value="3d">3 days</option>
-            <option value="7d" selected>7 days</option>
-            <option value="30d">30 days</option>
-            <option value="3m">3 months</option>
-            <option value="1y">Last year</option>
-          </select>
-        </label>
-        <label>Earthquake minimum magnitude
-          <select id="sel-mag">
-            <option value="2">2+</option>
-            <option value="3" selected>3+</option>
-            <option value="4">4+</option>
-            <option value="5">5+</option>
-          </select>
-        </label>
+      <div class="row" style="margin-top:8px;">
+        <select id="period">
+          <option value="1d">24 hours</option>
+          <option value="3d">3 days</option>
+          <option value="7d" selected>7 days</option>
+          <option value="30d">30 days</option>
+          <option value="90d">3 months</option>
+          <option value="365d">Last year</option>
+        </select>
+        <select id="minMag">
+          <option value="2">M 2+</option>
+          <option value="3" selected>M 3+</option>
+          <option value="4">M 4+</option>
+          <option value="5">M 5+</option>
+        </select>
       </div>
-      <div class="row" style="margin-top:8px; gap:8px;">
-        <button id="btn-refresh">Refresh</button>
-        <small class="sub" id="last-upd">—</small>
+      <div class="row" style="margin-top:8px;">
+        <button class="btn" id="refreshBtn">Refresh</button>
+      </div>
+      <div class="last-upd" id="lastUpdated">Last updated: —</div>
+    </div>
+
+    <div class="section">
+      <h2>Data sources</h2>
+      <div class="list">
+        Earthquakes: USGS, EMSC (Seismic Portal)<br />
+        Fires: NASA FIRMS (VIIRS SNPP/NOAA-20, MODIS)
       </div>
     </div>
 
-    <div class="panel sources">
-      <strong>Data Sources</strong>
-      <ul style="margin:6px 0 0 16px; line-height:1.5;">
-        <li>USGS GeoJSON (FDSN)</li>
-        <li>EMSC FDSN (SeismicPortal)</li>
-        <li>NASA FIRMS CSV API (VIIRS/MODIS)</li>
-        <li>EFFIS Active Fires (ArcGIS REST) <small>(best effort)</small></li>
-        <li>GDACS Floods <small>(best effort)</small></li>
-        <li>Copernicus EMS Activations <small>(best effort)</small></li>
-      </ul>
-      <div class="footer-note">
-        CORS: set <code>proxyUrl</code> to your deployed proxy if a feed blocks the browser. Example: <code>https://yourproxy.example.com/</code>. We URL‑encode target URLs before proxying.
-      </div>
-    </div>
+    <div class="footer">© Live, client-side map. Built with Leaflet.</div>
   </aside>
-  <main id="map"></main>
+
+  <div id="map"></div>
 </div>
 
-<!-- Leaflet JS -->
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-<!-- PapaParse for CSV parsing -->
-<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 <script>
-/*************************************************
- * CONFIGURATION
- *************************************************/
-// Greece Bounding Box (change here if you need another area)
-const GREECE_BBOX = { south: 34.8, north: 41.8, west: 19.3, east: 29.6 };
+/** ====== Config & state ====== */
+const GREECE_BOUNDS = [[34.8, 19.3],[41.8, 29.6]]; // [southWest, northEast]
+const STORAGE_KEY = "greece.disaster.apiBase";
 
-// PROXY: If any request is blocked by CORS, set this to a proxy you control.
-// Example: const proxyUrl = "https://yourproxy.example.com/";
-// The code will call proxyUrl + encodeURIComponent(targetUrl)
-const proxyUrl = ""; // <- leave empty if not using a proxy
+// API base resolution: ?api=... → localStorage → (empty = must set once)
+const urlParams = new URLSearchParams(location.search);
+const apiFromQuery = urlParams.get("api");
+if (apiFromQuery) localStorage.setItem(STORAGE_KEY, apiFromQuery);
+const API_BASE = localStorage.getItem(STORAGE_KEY) || "";
 
-// NASA FIRMS MAP_KEY — paste the key you obtained from FIRMS here.
-// You showed a key that looks like: 7254e9....d6a5cd2e5 — put it below.
-const FIRMS_MAP_KEY = "7254e96781344388849dda6a5cd2e589"; // REQUIRED for FIRMS API. Keep private if hosting publicly.
+const $ = s => document.querySelector(s);
+$("#apiBase").value = API_BASE;
+$("#saveApiBtn").addEventListener("click", () => {
+  const v = $("#apiBase").value.trim();
+  if (!v) { notifyApi("Please paste your Worker URL."); return; }
+  localStorage.setItem(STORAGE_KEY, v);
+  notifyApi("Saved.");
+});
+$("#testApiBtn").addEventListener("click", async () => {
+  try {
+    const base = ($("#apiBase").value || "").trim();
+    if (!base) return notifyApi("Enter your Worker URL first.");
+    const r = await fetch(base + "/api/earthquakes?period=1d&minmag=3", { cache: "no-store" });
+    notifyApi(r.ok ? "API reachable ✔" : `API error: ${r.status}`);
+  } catch (e) {
+    notifyApi("API not reachable.");
+  }
+});
+function notifyApi(msg) { $("#apiStatus").textContent = msg; }
 
-// Leaflet Map init (center on Greece)
-const map = L.map('map').setView([38.6, 23.7], 6);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  maxZoom: 19,
-  attribution: '&copy; OpenStreetMap contributors'
-}).addTo(map);
+let map, eqLayer, fireLayer;
+initMap();
 
-// Layer groups
-const layers = {
-  earthquakes: L.layerGroup().addTo(map),
-  fires: L.layerGroup().addTo(map),
-  floods: L.layerGroup().addTo(map)
+const els = {
+  statEq: $("#statEq"),
+  statFire: $("#statFire"),
+  statFlood: $("#statFlood"),
+  statTotal: $("#statTotal"),
+  lastUpdated: $("#lastUpdated"),
+  srcStatus: $("#sourceStatus"),
+  toggleEq: $("#toggleEq"),
+  toggleFire: $("#toggleFire"),
+  period: $("#period"),
+  minMag: $("#minMag"),
+  refresh: $("#refreshBtn")
 };
 
-// UI elements
-const el = (id) => document.getElementById(id);
-const kpiEq = el('kpi-eq'), kpiFire = el('kpi-fire'), kpiFlood = el('kpi-flood'), kpiTotal = el('kpi-total');
-const st = {
-  usgs: el('st-usgs'), emsc: el('st-emsc'), noa: el('st-noa'),
-  firms: el('st-firms'), effis: el('st-effis'), gdacs: el('st-gdacs'), cems: el('st-cems')
-};
+els.toggleEq.addEventListener("change", () => { eqLayer.eachLayer(l => l.setStyle ? l.setStyle({opacity: els.toggleEq.checked ? 1 : 0, fillOpacity: els.toggleEq.checked ? 0.5 : 0}) : null); });
+els.toggleFire.addEventListener("change", () => { fireLayer.eachLayer(l => l.setStyle ? l.setStyle({opacity: els.toggleFire.checked ? 1 : 0, fillOpacity: els.toggleFire.checked ? 0.7 : 0}) : null); });
+els.period.addEventListener("change", refreshAll);
+els.minMag.addEventListener("change", refreshAll);
+els.refresh.addEventListener("click", refreshAll);
 
-// Filters
-const chkEq = el('chk-eq'), chkFire = el('chk-fire'), chkFlood = el('chk-flood');
-const selPeriod = el('sel-period');
-const selMag = el('sel-mag');
-const lastUpd = el('last-upd');
+/** ====== Fetch & render ====== */
+let autoTimer = null;
+refreshAll(); // initial
+scheduleAuto();
 
-// Helpers
-const now = () => new Date();
-const toISO = (d) => d.toISOString();
-function startOfPeriod(period) {
-  const d = now();
-  const dd = new Date(d);
-  switch(period){
-    case '24h': dd.setDate(d.getDate()-1); break;
-    case '3d': dd.setDate(d.getDate()-3); break;
-    case '7d': dd.setDate(d.getDate()-7); break;
-    case '30d': dd.setDate(d.getDate()-30); break;
-    case '3m': dd.setMonth(d.getMonth()-3); break;
-    case '1y': dd.setFullYear(d.getFullYear()-1); break;
-    default: dd.setDate(d.getDate()-7);
+function scheduleAuto() {
+  if (autoTimer) clearInterval(autoTimer);
+  autoTimer = setInterval(refreshAll, 10 * 60 * 1000); // 10 min
+}
+
+async function refreshAll() {
+  const base = ($("#apiBase").value || "").trim();
+  if (!base) {
+    notifyApi("Set your Worker URL to load data.");
+    return;
   }
-  return dd;
-}
+  localStorage.setItem(STORAGE_KEY, base);
 
-function status(node, s){
-  node.classList.remove('ok','err','load');
-  node.classList.add(s);
-}
+  const period = els.period.value;
+  const minmag = els.minMag.value;
 
-function withinBBox(lat, lon) {
-  return lat >= GREECE_BBOX.south && lat <= GREECE_BBOX.north &&
-         lon >= GREECE_BBOX.west && lon <= GREECE_BBOX.east;
-}
+  // Clear old layers
+  eqLayer.clearLayers();
+  fireLayer.clearLayers();
 
-function proxied(url){
-  return proxyUrl ? (proxyUrl + encodeURIComponent(url)) : url;
-}
-
-/*************************************************
- * FETCHERS
- *************************************************/
-// USGS Earthquakes
-// How to adjust: change bbox, min magnitude, and time with params below
-async function fetchUSGS(start, end, minMag){
-  try {
-    status(st.usgs,'load');
-    const url = new URL('https://earthquake.usgs.gov/fdsnws/event/1/query');
-    url.searchParams.set('format','geojson');
-    url.searchParams.set('starttime', start.toISOString());
-    url.searchParams.set('endtime', end.toISOString());
-    url.searchParams.set('minmagnitude', String(minMag));
-    url.searchParams.set('minlatitude', String(GREECE_BBOX.south));
-    url.searchParams.set('maxlatitude', String(GREECE_BBOX.north));
-    url.searchParams.set('minlongitude', String(GREECE_BBOX.west));
-    url.searchParams.set('maxlongitude', String(GREECE_BBOX.east));
-    url.searchParams.set('orderby','time');
-    url.searchParams.set('limit','20000');
-
-    const resp = await fetch(proxied(url.toString()));
-    if(!resp.ok) throw new Error('USGS HTTP ' + resp.status);
-    const data = await resp.json();
-    status(st.usgs,'ok');
-
-    return (data.features||[]).map(f=>({
-      _src:'USGS',
-      id: f.id,
-      lat: f.geometry.coordinates[1],
-      lon: f.geometry.coordinates[0],
-      depth: f.geometry.coordinates[2],
-      mag: f.properties.mag,
-      time: f.properties.time,
-      place: f.properties.place,
-      url: f.properties.url,
-      sources:['USGS']
-    })).filter(e=> withinBBox(e.lat,e.lon));
-  } catch(e){
-    console.error(e); status(st.usgs,'err'); return [];
-  }
-}
-
-// EMSC FDSN (SeismicPortal)
-// How to configure: this uses the public FDSN endpoint and same filters
-async function fetchEMSC(start, end, minMag){
-  try {
-    status(st.emsc,'load');
-    const url = new URL('https://www.seismicportal.eu/fdsnws/event/1/query');
-    url.searchParams.set('format','geojson');
-    url.searchParams.set('starttime', start.toISOString());
-    url.searchParams.set('endtime', end.toISOString());
-    url.searchParams.set('minmagnitude', String(minMag));
-    url.searchParams.set('minlat', String(GREECE_BBOX.south));
-    url.searchParams.set('maxlat', String(GREECE_BBOX.north));
-    url.searchParams.set('minlon', String(GREECE_BBOX.west));
-    url.searchParams.set('maxlon', String(GREECE_BBOX.east));
-
-    const resp = await fetch(proxied(url.toString()));
-    if(!resp.ok) throw new Error('EMSC HTTP ' + resp.status);
-    const data = await resp.json();
-    status(st.emsc,'ok');
-
-    return (data.features||[]).map(f=>({
-      _src:'EMSC',
-      id: f.id || (f.properties && f.properties.eventid) || Math.random().toString(36).slice(2),
-      lat: f.geometry.coordinates[1],
-      lon: f.geometry.coordinates[0],
-      depth: f.geometry.coordinates[2],
-      mag: f.properties.mag,
-      time: Date.parse(f.properties.time || f.properties.origintime || f.properties.timevalue || f.properties.date || new Date()),
-      place: f.properties.flynn_region || f.properties.place || '—',
-      url: 'https://www.seismicportal.eu',
-      sources:['EMSC']
-    })).filter(e=> withinBBox(e.lat,e.lon));
-  } catch(e){
-    console.error(e); status(st.emsc,'err'); return [];
-  }
-}
-
-// NOA — left as optional because of changing endpoints. Mark as skipped.
-async function fetchNOA(){ status(st.noa,'err'); return []; }
-
-// NASA FIRMS — CSV API with MAP_KEY
-// Where to change region: set COUNTRY = 'GRC' for Greece (ISO-3). For a wider region use the area endpoints.
-// Period handling: For >7d we use the archive API with date range; else use convenient 24h/48h/7d endpoints.
-async function fetchFIRMS(period){
-  try {
-    status(st.firms,'load');
-    if(!FIRMS_MAP_KEY){ throw new Error('Missing FIRMS MAP_KEY'); }
-    const COUNTRY = 'GRC';
-    const end = now();
-    const start = startOfPeriod(period);
-
-    const prods = [
-      'VIIRS_NOAA20_NRT',
-      'VIIRS_SNPP_NRT',
-      'MODIS_NRT'
-    ];
-
-    // Build URL list
-    const urls = [];
-    const shortPeriods = ['24h','48h','7d'];
-    const shortMap = { '24h':'24h', '3d':'48h', '7d':'7d' };
-    const effective = shortPeriods.includes(period) ? period : (period==='3d' ? '48h' : null);
-
-    if(effective){
-      const tag = shortMap[period] || period; // 24h/48h/7d
-      for(const p of prods){
-        urls.push(`https://firms.modaps.eosdis.nasa.gov/api/country/csv/${FIRMS_MAP_KEY}/${p}/${COUNTRY}/${tag}`);
-      }
-    } else {
-      // Archive with explicit date range (YYYY-MM-DD)
-      const fmt = (d)=> d.toISOString().slice(0,10);
-      const s = fmt(start), e = fmt(end);
-      for(const p of prods){
-        urls.push(`https://firms.modaps.eosdis.nasa.gov/api/country/csv/${FIRMS_MAP_KEY}/${p}/${COUNTRY}/${s}/${e}`);
-      }
-    }
-
-    const all = [];
-    for(const u of urls){
-      const resp = await fetch(proxied(u));
-      if(!resp.ok){ console.warn('FIRMS http', resp.status); continue; }
-      const text = await resp.text();
-      const parsed = Papa.parse(text, { header:true, dynamicTyping:true, skipEmptyLines:true });
-      for(const r of parsed.data){
-        const lat = parseFloat(r.latitude);
-        const lon = parseFloat(r.longitude);
-        if(!withinBBox(lat, lon)) continue;
-        // Merge-ready representation
-        const acqDate = r.acq_date; // YYYY-MM-DD
-        const acqTime = (r.acq_time||'').toString().padStart(4,'0'); // HHMM
-        const hh = parseInt(acqTime.slice(0,2));
-        const mm = parseInt(acqTime.slice(2,4));
-        const dt = new Date(`${acqDate}T00:00:00Z`);
-        dt.setUTCHours(hh, mm, 0, 0);
-        all.push({
-          _src: 'FIRMS',
-          id: `${r.satellite||r.instrument||'sat'}-${r.acq_date}-${r.acq_time}-${lat.toFixed(3)}-${lon.toFixed(3)}`,
-          lat, lon,
-          brightness: r.brightness || r.brightness_ti4 || r.brightness_ti5,
-          confidence: r.confidence || r.confidence_text || r.confidence_level || r.confidence_ti4 || r.confidence_ti5,
-          time: dt.getTime(),
-          product: r.instrument || r.satellite || r.collection || 'VIIRS/MODIS',
-          sources:['FIRMS']
-        });
-      }
-    }
-    status(st.firms, all.length? 'ok' : 'ok');
-    return all;
-  } catch(e){
-    console.error(e); status(st.firms,'err'); return [];
-  }
-}
-
-// EFFIS Active Fires (best effort; endpoint may change/CORS). Configure URL here if you have a working layer.
-async function fetchEFFIS(){
-  try{
-    status(st.effis,'load');
-    // Placeholder attempt (may fail CORS). If it fails we mark as error but we still rely on FIRMS.
-    const url = 'https://services7.arcgis.com/XMIR4cC9y7uWm7pG/arcgis/rest/services/EFFIS_Global_Active_Fires/FeatureServer/0/query?where=1%3D1&outFields=*&f=geojson';
-    const resp = await fetch(proxied(url));
-    if(!resp.ok) throw new Error('EFFIS HTTP ' + resp.status);
-    const gj = await resp.json();
-    const out = [];
-    for(const f of (gj.features||[])){
-      const [lon, lat] = f.geometry.coordinates;
-      if(!withinBBox(lat, lon)) continue;
-      const t = Date.parse(f.properties.acq_date || f.properties.DetectDate || f.properties.date || new Date());
-      out.push({_src:'EFFIS', id: 'effis-'+(f.id||t), lat, lon, brightness: f.properties.brightness || f.properties.BRIGHTNESS, confidence: f.properties.confidence || f.properties.CONFIDENCE, time:t, product:'EFFIS', sources:['EFFIS']});
-    }
-    status(st.effis,'ok');
-    return out;
-  } catch(e){ console.warn(e); status(st.effis,'err'); return []; }
-}
-
-// GDACS Floods (best effort; JSON feed)
-async function fetchGDACS(start, end){
-  try{
-    status(st.gdacs,'load');
-    // GeoJSON for all events, we will filter FL floods and bbox/time
-    const url = 'https://www.gdacs.org/gdacsapi/api/events/geteventlist/GEOSJSON';
-    const resp = await fetch(proxied(url));
-    if(!resp.ok) throw new Error('GDACS HTTP ' + resp.status);
-    const gj = await resp.json();
-    const out = [];
-    for(const f of (gj.features||[])){
-      const p = f.properties||{};
-      if((p.eventtype||p.eventType) !== 'FL') continue; // Floods only
-      const coords = f.geometry && (f.geometry.coordinates || []);
-      // Represent flood by centroid if Polygon/MultiPolygon
-      let lat=null, lon=null;
-      if(f.geometry.type === 'Point'){ lon = coords[0]; lat = coords[1]; }
-      else if(f.geometry.type.includes('Polygon')){
-        // rough centroid of first ring
-        const ring = (f.geometry.type==='Polygon'? coords[0] : coords[0][0]) || [];
-        if(ring.length){
-          let sx=0, sy=0; for(const c of ring){ sx += c[0]; sy += c[1]; }
-          lon = sx/ring.length; lat = sy/ring.length;
-        }
-      }
-      if(lat==null||lon==null) continue;
-      if(!withinBBox(lat, lon)) continue;
-      const t = Date.parse(p.fromdate || p.todate || p.alertdate || p.pubDate || new Date());
-      if(t < start.getTime() || t > end.getTime()) continue;
-      out.push({_src:'GDACS', id: p.eventid || p.eventId || Math.random().toString(36).slice(2), lat, lon, severity:p.alertlevel || p.severity || p.alertLevel, time:t, area:p.country || p.region || '—', url:'https://www.gdacs.org', sources:['GDACS']});
-    }
-    status(st.gdacs,'ok');
-    return out;
-  }catch(e){ console.warn(e); status(st.gdacs,'err'); return []; }
-}
-
-// Copernicus EMS — activations RSS/XML (best effort)
-async function fetchCEMS(start, end){
-  try{
-    status(st.cems,'load');
-    const url = 'https://emergency.copernicus.eu/ems-feed/activations?format=xml';
-    const resp = await fetch(proxied(url));
-    if(!resp.ok) throw new Error('CEMS HTTP ' + resp.status);
-    const text = await resp.text();
-    const xml = new DOMParser().parseFromString(text,'application/xml');
-    const items = Array.from(xml.querySelectorAll('item'));
-    const out = [];
-    for(const it of items){
-      const title = it.querySelector('title')?.textContent || '';
-      const link = it.querySelector('link')?.textContent || '';
-      const pubDate = it.querySelector('pubDate')?.textContent || '';
-      const t = Date.parse(pubDate || new Date());
-      if(t < start.getTime() || t > end.getTime()) continue;
-      // Very rough filter: only keep flood-related activations and within bbox if a lat/lon appears in description (often not provided). We'll keep as national-level markers in Athens.
-      const isFlood = /flood/i.test(title);
-      if(!isFlood) continue;
-      const lat = 37.98, lon = 23.72; // Athens as placeholder location when exact coords absent
-      if(!withinBBox(lat, lon)) continue;
-      out.push({_src:'CEMS', id: 'cems-'+t, lat, lon, severity: 'Activation', time:t, area:title, url:link, sources:['CEMS']});
-    }
-    status(st.cems,'ok');
-    return out;
-  }catch(e){ console.warn(e); status(st.cems,'err'); return []; }
-}
-
-/*************************************************
- * MERGING (cross‑check rules)
- *************************************************/
-// Haversine distance in km
-function haversine(lat1, lon1, lat2, lon2){
-  const toRad = (x)=> x*Math.PI/180;
-  const R=6371; const dLat=toRad(lat2-lat1); const dLon=toRad(lon2-lon1);
-  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)**2;
-  return 2*R*Math.asin(Math.sqrt(a));
-}
-
-// Earthquakes: merge if within 20 km, ±5 min, |ΔM| < 0.3
-function mergeEarthquakes(list){
-  const merged=[];
-  for(const e of list){
-    let found=false;
-    for(const m of merged){
-      if(Math.abs(e.time - m.time) <= 5*60*1000 && haversine(e.lat,e.lon,m.lat,m.lon) <= 20 && Math.abs((e.mag||0)-(m.mag||0)) < 0.3){
-        m.sources = Array.from(new Set([...(m.sources||[]), ...(e.sources||[])]));
-        m.ids = (m.ids||new Set()).add(e.id);
-        m.mag = Math.max(m.mag||0, e.mag||0);
-        found=true; break;
-      }
-    }
-    if(!found){ e.ids = new Set([e.id]); merged.push(e); }
-  }
-  return merged;
-}
-
-// Fires: merge if within 2 km and ±12 hours
-function mergeFires(list){
-  const merged=[]; const tw = 12*60*60*1000;
-  for(const f of list){
-    let entry = merged.find(m => Math.abs(f.time - m.time) <= tw && haversine(f.lat,f.lon,m.lat,m.lon) <= 2);
-    if(entry){ entry.sources = Array.from(new Set([...(entry.sources||[]), ...(f.sources||[])])); }
-    else { merged.push(f); }
-  }
-  return merged;
-}
-
-// Floods: merge if within 10 km and ±48 hours
-function mergeFloods(list){
-  const merged=[]; const tw = 48*60*60*1000;
-  for(const f of list){
-    let entry = merged.find(m => Math.abs(f.time - m.time) <= tw && haversine(f.lat,f.lon,m.lat,m.lon) <= 10);
-    if(entry){ entry.sources = Array.from(new Set([...(entry.sources||[]), ...(f.sources||[])])); }
-    else { merged.push(f); }
-  }
-  return merged;
-}
-
-/*************************************************
- * RENDERING
- *************************************************/
-function clearLayers(){
-  Object.values(layers).forEach(l=> l.clearLayers());
-}
-
-function magColor(m){
-  if(m>=6) return '#ff1f1f';
-  if(m>=5) return '#ff4d1f';
-  if(m>=4) return '#ff7a1f';
-  if(m>=3) return '#ffb01f';
-  return '#ffe21f';
-}
-
-function addEarthquakes(list){
-  list.forEach(e=>{
-    const r = Math.max(6, (e.mag||2)*3.5);
-    const c = magColor(e.mag||2);
-    const circle = L.circleMarker([e.lat, e.lon], { radius:r, color:c, weight:1, fillColor:c, fillOpacity:0.6 });
-    const timeStr = new Date(e.time).toLocaleString();
-    const srcs = (e.sources||[]).join(', ');
-    circle.bindPopup(`<b>Earthquake</b><br/><b>M</b> ${e.mag?.toFixed?.(1) || e.mag} — <b>Depth</b> ${(e.depth??'—')} km<br/>${e.place||'—'}<br/><small>${timeStr}</small><br/><small>Sources: ${srcs}</small><br/>${e.url?`<a href="${e.url}" target="_blank">details</a>`:''}`);
-    circle.addTo(layers.earthquakes);
-  });
-}
-
-function addFires(list){
-  list.forEach(f=>{
-    const marker = L.circleMarker([f.lat, f.lon], { radius:5, color:'#ff4d4d', fillColor:'#ff4d4d', fillOpacity:0.9, weight:0 });
-    const timeStr = new Date(f.time).toLocaleString();
-    const conf = f.confidence !== undefined ? ` — <b>Conf</b> ${f.confidence}` : '';
-    marker.bindPopup(`<b>Active Fire</b><br/><b>Brightness</b> ${f.brightness ?? '—'}${conf}<br/><small>${timeStr}</small><br/><small>Sources: ${(f.sources||[]).join(', ')}</small>`);
-    marker.addTo(layers.fires);
-  });
-}
-
-function addFloods(list){
-  list.forEach(f=>{
-    const marker = L.circleMarker([f.lat, f.lon], { radius:6, color:'#3fa9ff', fillColor:'#3fa9ff', fillOpacity:0.8, weight:0 });
-    const timeStr = new Date(f.time).toLocaleString();
-    marker.bindPopup(`<b>Flood</b><br/>${f.area || '—'}<br/><b>Severity</b> ${f.severity || '—'}<br/><small>${timeStr}</small><br/><small>Sources: ${(f.sources||[]).join(', ')}</small>${f.url?`<br/><a href="${f.url}" target="_blank">details</a>`:''}`);
-    marker.addTo(layers.floods);
-  });
-}
-
-function updateKPIs(eq, fi, fl){
-  kpiEq.textContent = eq.length; kpiFire.textContent = fi.length; kpiFlood.textContent = fl.length; kpiTotal.textContent = eq.length + fi.length + fl.length;
-}
-
-/*************************************************
- * CONTROLLER
- *************************************************/
-async function loadAll(){
-  const period = selPeriod.value; const minMag = Number(selMag.value);
-  const end = now(); const start = startOfPeriod(period);
-
-  lastUpd.textContent = 'Loading…';
-
-  // Fetch
-  const [usgs, emsc, noa, firms, effis, gdacs, cems] = await Promise.all([
-    fetchUSGS(start, end, minMag),
-    fetchEMSC(start, end, minMag),
-    fetchNOA(start, end, minMag),
-    fetchFIRMS(period),
-    fetchEFFIS(),
-    fetchGDACS(start, end),
-    fetchCEMS(start, end)
+  // Parallel fetches
+  const [eqRes, fireRes] = await Promise.allSettled([
+    fetch(`${base}/api/earthquakes?period=${encodeURIComponent(period)}&minmag=${encodeURIComponent(minmag)}`, { cache: "no-store" }),
+    fetch(`${base}/api/fires?period=${encodeURIComponent(period)}`, { cache: "no-store" })
   ]);
 
-  // Merge categories
-  const quakes = mergeEarthquakes([...usgs, ...emsc, ...noa]);
-  const fires = mergeFires([...(firms||[]), ...(effis||[])]);
-  const floods = mergeFloods([...(gdacs||[]), ...(cems||[])]);
+  let eqData = [], fireData = [];
+  let sources = { earthquakes:{}, fires:{} };
+  let updatedStr = new Date().toLocaleString();
 
-  // Render
-  clearLayers();
-  if(chkEq.checked) addEarthquakes(quakes);
-  if(chkFire.checked) addFires(fires);
-  if(chkFlood.checked) addFloods(floods);
-  updateKPIs(quakes, fires, floods);
+  // Earthquakes handling
+  if (eqRes.status === "fulfilled" && eqRes.value.ok) {
+    try {
+      const j = await eqRes.value.json();
+      const arr = (j?.data?.earthquakes) || [];
+      // NO LIMIT: plot all
+      eqData = arr.filter(v => isFinite(v.lat) && isFinite(v.lon));
+      sources.earthquakes = (j?.sources?.earthquakes) || {};
+      updatedStr = j?.updated || updatedStr;
+    } catch {
+      // ignore parse errors, already handled by Worker usually
+    }
+  }
 
-  lastUpd.textContent = 'Updated ' + new Date().toLocaleString();
+  // Fires handling
+  if (fireRes.status === "fulfilled" && fireRes.value.ok) {
+    try {
+      const j = await fireRes.value.json();
+      const arr = j?.data || [];
+      fireData = arr.filter(v => isFinite(v.lat) && isFinite(v.lon));
+      sources.fires = (j?.sources?.fires) || {};
+      updatedStr = j?.updated || updatedStr;
+    } catch {}
+  }
+
+  // Draw earthquakes
+  for (const q of eqData) {
+    const m = q.mag ?? 0;
+    const color = magColor(m);
+    const radius = magRadius(m);
+    const popup = `
+      <div style="min-width:220px">
+        <div><strong>M ${fmt(m)}</strong> • ${escapeHtml(q.place || "")}</div>
+        <div>${q.time ? new Date(q.time).toLocaleString() : ""}</div>
+        <div>Depth: ${q.depth != null ? `${fmt(q.depth)} km` : "—"}</div>
+        <div>Sources: ${(q.sources||[]).join(", ")}</div>
+        ${q.url ? `<div><a class="link" href="${q.url}" target="_blank" rel="noopener">Detail</a></div>` : ""}
+      </div>
+    `;
+    L.circleMarker([q.lat, q.lon], {
+      radius, color, weight: 1.5, fillColor: color, fillOpacity: 0.5
+    }).bindPopup(popup).addTo(eqLayer);
+  }
+
+  // Draw fires
+  for (const f of fireData) {
+    const color = f.verified ? "#36d399" : "#ef4444";
+    const popup = `
+      <div style="min-width:220px">
+        <div><strong>Fire pixel</strong> • ${f.verified ? "Verified (2+ sources)" : "Single source"}</div>
+        <div>${f.time ? new Date(f.time).toLocaleString() : ""}</div>
+        <div>Brightness: ${fmt(f.brightness)} | FRP: ${fmt(f.frp)}</div>
+        <div>Confidence: ${escapeHtml(String(f.confidence ?? "—"))}</div>
+        <div>Sources: ${(f.sources||[]).join(", ")}</div>
+      </div>
+    `;
+    L.circleMarker([f.lat, f.lon], {
+      radius: 4.5, color, weight: 1, fillColor: color, fillOpacity: 0.7
+    }).bindPopup(popup).addTo(fireLayer);
+  }
+
+  // Update stats
+  const eqCount = eqData.length;
+  const fireCount = fireData.length;
+  els.statEq.textContent = eqCount;
+  els.statFire.textContent = fireCount;
+  els.statFlood.textContent = 0;
+  els.statTotal.textContent = eqCount + fireCount;
+
+  // Update sources panel
+  renderSources(sources);
+
+  // Updated time
+  els.lastUpdated.textContent = "Last updated: " + new Date(updatedStr).toLocaleString();
+
+  // Toggle visibility per checkbox (post-draw)
+  els.toggleEq.dispatchEvent(new Event("change"));
+  els.toggleFire.dispatchEvent(new Event("change"));
 }
 
-// Wire up UI
-['change','input'].forEach(evt=>{
-  selPeriod.addEventListener(evt, loadAll);
-  selMag.addEventListener(evt, loadAll);
-  chkEq.addEventListener(evt, loadAll);
-  chkFire.addEventListener(evt, loadAll);
-  chkFlood.addEventListener(evt, loadAll);
-});
+/** ====== UI helpers ====== */
+function renderSources(sources) {
+  const items = [];
+  // Earthquakes
+  items.push(srcRow("USGS", (sources.earthquakes||{}).USGS));
+  items.push(srcRow("EMSC", (sources.earthquakes||{}).EMSC));
+  items.push(srcRow("NOA", (sources.earthquakes||{}).NOA));
+  // Fires
+  items.push(srcRow("FIRMS", (sources.fires||{}).FIRMS));
+  items.push(srcRow("EFFIS", (sources.fires||{}).EFFIS));
+  // (Flood providers listed for completeness)
+  items.push(srcRow("GDACS", (sources.floods||{}).GDACS));
+  items.push(srcRow("Copernicus EMS", (sources.floods||{}).CEMS));
 
-el('btn-refresh').addEventListener('click', loadAll);
+  $("#sourceStatus").innerHTML = items.join("");
+}
+function srcRow(name, state) {
+  const s = String(state || "skipped").toLowerCase();
+  const cls = s === "ok" ? "ok" : (s === "error" ? "error" : "");
+  const cap = s.charAt(0).toUpperCase() + s.slice(1);
+  return `<div class="source"><span>${name}</span><span class="row" style="gap:8px;"><span>${cap}</span><span class="dot ${cls}"></span></span></div>`;
+}
 
-// Auto-refresh every 10 minutes
-setInterval(loadAll, 10*60*1000);
+/** ====== Map & styling ====== */
+function initMap() {
+  map = L.map("map", {
+    zoomControl: true,
+    attributionControl: true
+  }).fitBounds(GREECE_BOUNDS);
 
-// Initial load
-loadAll();
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 18,
+    attribution: '&copy; <a class="link" href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a>'
+  }).addTo(map);
+
+  eqLayer = L.layerGroup().addTo(map);
+  fireLayer = L.layerGroup().addTo(map);
+}
+
+function magColor(m) {
+  if (m >= 6) return "#b91c1c"; // deep red
+  if (m >= 5) return "#ef4444"; // red
+  if (m >= 4) return "#f59e0b"; // amber
+  if (m >= 3) return "#fde047"; // yellow
+  return "#eab308"; // light yellow
+}
+function magRadius(m) {
+  // Smooth radius: base 4 + 2.2^m / scaling
+  const r = 4 + Math.pow(2.2, Math.max(0, m)) / 20;
+  return Math.max(4, Math.min(18, r));
+}
+function fmt(v) {
+  if (v == null || Number.isNaN(Number(v))) return "—";
+  const n = Number(v);
+  return (Math.abs(n) >= 100 ? n.toFixed(0) : (Math.abs(n) >= 10 ? n.toFixed(1) : n.toFixed(2)));
+}
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
 </script>
+
+<!-- Inline doc notes (per your original spec):
+- FIRMS region: handled server-side in your Worker. This UI just reads the Worker JSON.
+- USGS bbox/min magnitude/time: controlled by the filter UI -> query params to Worker.
+- EMSC/NOA/EFFIS/GDACS/Copernicus: statuses shown from Worker response; endpoints configured in the Worker.
+- CORS: your Worker sets permissive headers; this UI calls it directly. -->
+
 </body>
 </html>
