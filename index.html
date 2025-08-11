@@ -1,251 +1,347 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Greece Official Disaster Map</title>
-<link
-  rel="stylesheet"
-  href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-  integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
-  crossorigin=""
-/>
-<style>
-  :root{
-    --bg:#0f172a;--panel:#0b1222;--text:#e2e8f0;--muted:#94a3b8;--green:#22c55e;--red:#ef4444;--yellow:#f59e0b;
-  }
-  html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font:14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";}
-  #app{display:grid;grid-template-columns:280px 1fr;height:100%;}
-  #sidebar{background:var(--panel);padding:12px 12px 16px;border-right:1px solid #111827;overflow:auto}
-  .h{font-weight:700;font-size:16px;margin:0 0 4px}
-  .muted{color:var(--muted)}
-  .cards{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:8px 0 6px}
-  .card{background:#0d182f;border:1px solid #0f213f;border-radius:10px;padding:10px}
-  .big{font-size:22px;font-weight:800}
-  .row{display:flex;align-items:center;gap:8px;margin:8px 0}
-  .row > label{min-width:0;flex:1}
-  select,button{background:#0b1a33;border:1px solid #1e3a8a;color:var(--text);border-radius:8px;padding:6px 8px}
-  button{cursor:pointer}
-  .legend{display:flex;gap:10px;align-items:center;margin:8px 0}
-  .dot{width:8px;height:8px;border-radius:999px;display:inline-block}
-  #map{height:100%;width:100%}
-  .srcs{margin-top:10px;font-size:12px}
-  .status{display:flex;gap:10px;margin:6px 0}
-  .pill{font-size:12px;padding:2px 8px;border-radius:999px;border:1px solid #1f2937}
-  .ok{background:#062314;color:#8ef0b2;border-color:#14532d}
-  .err{background:#290909;color:#ffb4b4;border-color:#7f1d1d}
-</style>
+  <meta charset="utf-8" />
+  <title>Greece Official Disaster Map</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Leaflet -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  />
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""
+  ></script>
+
+  <style>
+    :root {
+      --bg:#101820;
+      --panel:#121c26;
+      --muted:#8aa0b2;
+      --text:#e8f0f6;
+      --green:#3dd87e;
+      --red:#ff5c5c;
+      --accent:#3aa0ff;
+    }
+    html, body { height:100%; margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji"; background:var(--bg); color:var(--text); }
+    #app { display:flex; height:100%; }
+    #sidebar {
+      width:260px; min-width:260px; max-width:320px;
+      background:var(--panel); padding:12px 12px 16px; box-sizing:border-box; overflow:auto; border-right:1px solid #0b141c;
+    }
+    #map { flex:1; }
+    h1 { font-size:16px; margin:4px 0 6px; }
+    .sub { font-size:12px; color:var(--muted); line-height:1.35; margin-bottom:10px; }
+    .grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px; }
+    .card {
+      background:#0e1821; border:1px solid #0b141c; border-radius:8px; padding:8px;
+    }
+    .k { font-size:12px; color:var(--muted); }
+    .v { font-size:20px; font-weight:700; margin-top:2px; }
+    .row { display:flex; align-items:center; gap:8px; margin:8px 0; }
+    .muted { color:var(--muted); font-size:12px; }
+    .controls label { font-size:13px; margin-right:8px; }
+    select, button {
+      background:#0a141c; color:var(--text); border:1px solid #0b141c; border-radius:6px; padding:6px 8px; font-size:13px;
+    }
+    button { cursor:pointer; }
+    .legend { font-size:12px; color:var(--muted); margin-top:10px; }
+    .status-dot { width:8px; height:8px; border-radius:50%; display:inline-block; margin-right:6px; }
+    .ok { background:var(--green); } .err { background:var(--red); }
+    .updated { font-size:12px; color:var(--muted); }
+    .divider { height:1px; background:#0b141c; margin:10px 0; }
+
+    /* Leaflet tweaks (better for dark background) */
+    .leaflet-control-zoom a { background:#0a141c; color:#fff; border:none; }
+    .leaflet-control-zoom a:hover { background:#13202b; }
+  </style>
 </head>
 <body>
 <div id="app">
   <aside id="sidebar">
-    <h1 class="h">Greece Official Disaster Map</h1>
-    <div class="muted" style="margin-bottom:8px">Live earthquakes and fires in Greece. Data refreshes automatically every 10 minutes.</div>
+    <h1>Greece Official Disaster Map</h1>
+    <div class="sub">Live earthquakes and fires in Greece. Data refreshes automatically every 10 minutes.</div>
 
-    <div class="cards">
-      <div class="card"><div class="muted">Earthquakes</div><div id="statQuakes" class="big">0</div></div>
-      <div class="card"><div class="muted">Fires</div><div id="statFires" class="big">0</div></div>
-      <div class="card"><div class="muted">Total</div><div id="statTotal" class="big">0</div></div>
-      <div class="card"><div class="muted">Last updated</div><div id="lastUpdated">—</div></div>
+    <div class="grid">
+      <div class="card">
+        <div class="k">Earthquakes</div>
+        <div class="v" id="stat-quakes">0</div>
+      </div>
+      <div class="card">
+        <div class="k">Fires</div>
+        <div class="v" id="stat-fires">0</div>
+      </div>
+      <div class="card" style="grid-column:1 / span 2;">
+        <div class="k">Total</div>
+        <div class="v" id="stat-total">0</div>
+      </div>
     </div>
 
-    <div class="h" style="margin-top:6px">Filters</div>
-    <div class="row">
-      <label><input type="checkbox" id="toggleQuakes" checked /> Earthquakes</label>
-      <label><input type="checkbox" id="toggleFires" checked /> Fires</label>
-    </div>
-    <div class="row">
-      <select id="timeRange" title="Time period">
-        <option value="1">24h</option>
-        <option value="3">3 days</option>
-        <option value="7" selected>7 days</option>
-        <option value="30">30 days</option>
-        <option value="90">3 months</option>
-        <option value="365">Last year</option>
-      </select>
-      <select id="minMag" title="Minimum magnitude">
-        <option value="2">M 2+</option>
-        <option value="3" selected>M 3+</option>
-        <option value="4">M 4+</option>
-        <option value="5">M 5+</option>
-      </select>
-      <button id="btnRefresh">Refresh</button>
+    <div class="row updated">Last updated: <span id="last-updated">—</span></div>
+
+    <div class="divider"></div>
+
+    <div class="controls">
+      <div class="row">
+        <label><input type="checkbox" id="show-quakes" checked /> Earthquakes</label>
+        <label><input type="checkbox" id="show-fires" checked /> Fires</label>
+      </div>
+
+      <div class="row">
+        <select id="timeRange" title="Time period (affects both)">
+          <option value="1">24 hours</option>
+          <option value="3">3 days</option>
+          <option value="7" selected>7 days</option>
+          <option value="30">30 days</option>
+          <option value="90">3 months</option>
+          <option value="365">Last year</option>
+        </select>
+
+        <select id="minMag" title="Minimum earthquake magnitude">
+          <option value="2">M 2+</option>
+          <option value="3" selected>M 3+</option>
+          <option value="4">M 4+</option>
+          <option value="5">M 5+</option>
+        </select>
+
+        <button id="btn-refresh">Refresh</button>
+      </div>
     </div>
 
-    <div class="h" style="margin-top:6px">API status</div>
-    <div class="status">
-      <span id="stEQ" class="pill">Earthquakes API</span>
-      <span id="stFI" class="pill">Fires API</span>
-    </div>
+    <div class="divider"></div>
 
-    <div class="srcs muted">
-      <b>Data Sources</b>
-      <ul>
-        <li>Earthquakes: USGS, EMSC (SeismicPortal)</li>
-        <li>Fires: NASA FIRMS (VIIRS SNPP/NOAA-20, MODIS)</li>
-      </ul>
-      © Live, client-side map. Built with Leaflet.
+    <div class="legend">
+      <div><span class="status-dot ok"></span>API reachable</div>
+      <div><span class="status-dot err"></span>API error</div>
+      <div style="margin-top:8px;">
+        • Earthquakes API • Fires API
+      </div>
+      <div style="margin-top:8px;">© Live, client-side map. Built with Leaflet.</div>
     </div>
   </aside>
+
   <div id="map"></div>
 </div>
 
-<script
-  src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-  integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
-  crossorigin=""
-></script>
 <script>
-/* =========================
-   CONFIG — your Worker base
-   ========================= */
-const API_BASE = "https://greece-disasters.odysseas-3d2.workers.dev/api";
+  // ================== CONFIG ==================
+  // Your Worker base URL (no trailing slash)
+  const API_BASE = 'https://greece-disasters.odysseas-3d2.workers.dev';
 
-/* ====== MAP ====== */
-const greeceBounds = [[34.8,19.3],[41.8,29.6]];
-const map = L.map('map',{zoomControl:true}).fitBounds(greeceBounds);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
-  attribution:'&copy; OpenStreetMap contributors'
-}).addTo(map);
+  // Greece bbox for Leaflet fit
+  const GRC_BBOX = { south:34.8, north:41.8, west:19.3, east:29.6 };
+  // ============================================
 
-const quakeLayer = L.layerGroup().addTo(map);
-const fireLayer  = L.layerGroup().addTo(map);
+  // Map
+  const map = L.map('map', { zoomSnap: 0.25 });
+  const center = [(GRC_BBOX.south + GRC_BBOX.north)/2, (GRC_BBOX.west + GRC_BBOX.east)/2];
+  map.setView(center, 6.25);
 
-/* ====== UI HOOKS ====== */
-const els = {
-  statQuakes: document.getElementById('statQuakes'),
-  statFires:  document.getElementById('statFires'),
-  statTotal:  document.getElementById('statTotal'),
-  lastUpdated:document.getElementById('lastUpdated'),
-  timeRange:  document.getElementById('timeRange'),
-  minMag:     document.getElementById('minMag'),
-  btnRefresh: document.getElementById('btnRefresh'),
-  tQuakes:    document.getElementById('toggleQuakes'),
-  tFires:     document.getElementById('toggleFires'),
-  stEQ:       document.getElementById('stEQ'),
-  stFI:       document.getElementById('stFI'),
-};
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap contributors'
+  }).addTo(map);
 
-/* ====== UTILS ====== */
-function setStatus(el, ok){
-  el.className = 'pill ' + (ok ? 'ok' : 'err');
-  el.textContent = el.id==='stEQ' ? 'Earthquakes API' : 'Fires API';
-}
-function fmtTime(ts){
-  const d = new Date(ts);
-  return d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'});
-}
+  const quakesLayer = L.layerGroup().addTo(map);
+  const firesLayer  = L.layerGroup().addTo(map);
 
-/* ====== DRAWING ====== */
-function quakeColor(m){
-  if (m>=5) return '#ef4444';
-  if (m>=4) return '#f59e0b';
-  if (m>=3) return '#fde047';
-  return '#a7f3d0';
-}
-function drawQuakes(list){
-  quakeLayer.clearLayers();
-  list.forEach(q=>{
-    const r = Math.max(6, q.mag*3.5);
-    const c = quakeColor(q.mag||0);
-    const m = L.circleMarker([q.lat,q.lon],{
-      radius:r, color:c, fillColor:c, fillOpacity:0.6, weight:1
-    }).bindPopup(`
-      <b>${(q.mag??'—').toFixed ? 'M '+q.mag.toFixed(1) : 'M '+q.mag}</b><br/>
-      ${q.place || ''}<br/>
-      <small>${new Date(q.time).toLocaleString()}</small><br/>
-      <small>Sources: ${(q.sources||[]).join(', ')}</small>
-    `);
-    quakeLayer.addLayer(m);
-  });
-}
-function drawFires(list){
-  fireLayer.clearLayers();
-  list.forEach(f=>{
-    const c = f.verified ? '#ef4444' : '#fb7185'; // verified = darker
-    const m = L.circleMarker([f.lat,f.lon],{
-      radius:4, color:c, fillColor:c, fillOpacity:0.9, weight:0.5
-    }).bindPopup(`
-      <b>Fire (VIIRS/MODIS)</b><br/>
-      Brightness: ${f.brightness ?? f.bright_ti4 ?? '—'}<br/>
-      Confidence: ${f.confidence ?? '—'}<br/>
-      <small>${new Date(f.time).toLocaleString()}</small><br/>
-      <small>Sources: ${(f.sources||[]).join(', ')}</small>
-    `);
-    fireLayer.addLayer(m);
-  });
-}
+  // UI
+  const $ = sel => document.querySelector(sel);
+  const statQuakes = $('#stat-quakes');
+  const statFires  = $('#stat-fires');
+  const statTotal  = $('#stat-total');
+  const lastUpdated = $('#last-updated');
 
-/* ====== DATA FETCH ======
-   IMPORTANT: time filter fix — we read the selected
-   days from the <select> and pass ?days=<n> to both
-   endpoints (and &minMag to earthquakes).
-*/
-async function fetchEarthquakes(days, minMag){
-  const url = `${API_BASE}/earthquakes?days=${days}&minMag=${minMag}`;
-  const res = await fetch(url, {cache:'no-store'});
-  const json = await res.json();
-  setStatus(els.stEQ, json.ok !== false);
-  // Worker returns either {ok, data:[...]} or the list directly.
-  if (json.data) return json.data.earthquakes || json.data || [];
-  return json.earthquakes || json || [];
-}
+  // Inputs
+  const showQuakes = $('#show-quakes');
+  const showFires  = $('#show-fires');
+  const timeRange  = $('#timeRange');
+  const minMagSel  = $('#minMag');
+  const btnRefresh = $('#btn-refresh');
 
-async function fetchFires(days){
-  const url = `${API_BASE}/fires?days=${days}`;
-  const res = await fetch(url, {cache:'no-store'});
-  const json = await res.json();
-  setStatus(els.stFI, json.ok !== false);
-  if (json.data) return json.data;
-  return json;
-}
+  showQuakes.addEventListener('change', () => { quakesLayer.clearLayers(); drawQuakes(_quakesFiltered); if (!showQuakes.checked) quakesLayer.clearLayers(); });
+  showFires.addEventListener('change',  () => { firesLayer.clearLayers();  drawFires(_firesFiltered);   if (!showFires.checked)  firesLayer.clearLayers();  });
 
-let autoTimer=null;
-async function refresh(){
-  const days   = parseInt(els.timeRange.value,10);        // <-- fixed: ensure numeric days
-  const minMag = parseFloat(els.minMag.value);
+  timeRange.addEventListener('change', () => refresh(true));
+  minMagSel.addEventListener('change', () => refresh(true));
+  btnRefresh.addEventListener('click', () => refresh(true));
 
-  const [quakes, fires] = await Promise.all([
-    els.tQuakes.checked ? fetchEarthquakes(days, minMag) : Promise.resolve([]),
-    els.tFires.checked  ? fetchFires(days)               : Promise.resolve([]),
-  ]);
+  // Data caches (in-memory)
+  let _quakesRaw = [], _firesRaw = [];
+  let _quakesFiltered = [], _firesFiltered = [];
 
-  // Apply UI filters again client-side (safety)
-  const qFiltered = quakes.filter(q => (q.mag ?? 0) >= minMag);
+  function toMs(t) {
+    // Worker may return number (ms) or ISO string; normalize
+    if (typeof t === 'number') return t;
+    const parsed = Date.parse(t);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
 
-  drawQuakes(qFiltered);
-  drawFires(fires);
+  function cutoffMs(days) {
+    return Date.now() - Number(days) * 24 * 60 * 60 * 1000;
+  }
 
-  els.statQuakes.textContent = qFiltered.length.toString();
-  els.statFires.textContent  = fires.length.toString();
-  els.statTotal.textContent  = (qFiltered.length + fires.length).toString();
-  els.lastUpdated.textContent = fmtTime(Date.now());
-}
+  function withinGreece(lat, lon) {
+    return lat >= GRC_BBOX.south && lat <= GRC_BBOX.north && lon >= GRC_BBOX.west && lon <= GRC_BBOX.east;
+  }
 
-/* ====== EVENTS ====== */
-['change','input'].forEach(ev=>{
-  els.timeRange.addEventListener(ev, refresh);   // <-- fixed: changing time now refetches
-  els.minMag.addEventListener(ev, refresh);
-  els.tQuakes.addEventListener(ev, ()=>{
-    quakeLayer.clearLayers();
-    refresh();
-  });
-  els.tFires.addEventListener(ev, ()=>{
-    fireLayer.clearLayers();
-    refresh();
-  });
-});
-els.btnRefresh.addEventListener('click', refresh);
+  async function fetchJSON(url) {
+    const res = await fetch(url, { cache: 'no-store' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  }
 
-/* ====== AUTO REFRESH (10 minutes) ====== */
-function startAuto(){
-  if (autoTimer) clearInterval(autoTimer);
-  autoTimer = setInterval(refresh, 10*60*1000);
-}
+  function fmtTime(ms) {
+    const d = new Date(ms);
+    return d.toLocaleString([], { hour12:false });
+  }
 
-/* ====== BOOT ====== */
-refresh();
-startAuto();
+  function quakeColor(m) {
+    // yellow -> red scale
+    const clamped = Math.max(2, Math.min(6.5, m || 0));
+    const t = (clamped - 2) / 4.5; // 0..1
+    const r = Math.round(255 * t);
+    const g = Math.round(200 * (1 - t) + 40 * t);
+    return `rgb(${r},${g},0)`;
+  }
+
+  function quakeRadius(m) {
+    // perceptual-ish
+    return 3 + Math.pow(Math.max(0, m), 1.8);
+  }
+
+  function fireColor(verified) {
+    return verified ? '#ff3b3b' : '#ffb347';
+  }
+
+  function fireRadius(brightness) {
+    const b = Number(brightness) || 0;
+    return 3 + Math.min(10, (b - 300) / 8); // small tweak
+  }
+
+  function updateStats() {
+    const q = _quakesFiltered.length;
+    const f = _firesFiltered.length;
+    statQuakes.textContent = q.toLocaleString();
+    statFires.textContent  = f.toLocaleString();
+    statTotal.textContent  = (q + f).toLocaleString();
+    lastUpdated.textContent = new Date().toLocaleTimeString([], { hour12:false });
+  }
+
+  function drawQuakes(quakes) {
+    if (!showQuakes.checked) return;
+    for (const e of quakes) {
+      const lat = e.lat, lon = e.lon;
+      if (!withinGreece(lat, lon)) continue;
+
+      const mag = Number(e.mag) || 0;
+      const color = quakeColor(mag);
+      const radius = quakeRadius(mag);
+
+      const marker = L.circleMarker([lat, lon], {
+        radius, color, weight:1, fillColor: color, fillOpacity:0.6
+      });
+
+      const timeMs = toMs(e.time);
+      const place = e.place || '—';
+      const depth = (e.depth ?? '—');
+      const srcs  = Array.isArray(e.sources) ? e.sources.join(', ') : (e._src || '—');
+      const link  = e.url ? `<br/><a href="${e.url}" target="_blank" rel="noopener">details</a>` : '';
+
+      marker.bindPopup(
+        `<b>Magnitude:</b> M ${mag.toFixed(1)}<br/>
+         <b>Depth:</b> ${depth} km<br/>
+         <b>Time:</b> ${fmtTime(timeMs)}<br/>
+         <b>Place:</b> ${place}<br/>
+         <b>Sources:</b> ${srcs}${link}`
+      );
+      marker.addTo(quakesLayer);
+    }
+  }
+
+  function drawFires(fires) {
+    if (!showFires.checked) return;
+    for (const f of fires) {
+      const lat = f.lat, lon = f.lon;
+      if (!withinGreece(lat, lon)) continue;
+
+      const color = fireColor(!!f.verified);
+      const radius = Math.max(3, fireRadius(f.brightness));
+
+      const marker = L.circleMarker([lat, lon], {
+        radius, color, weight:1, fillColor: color, fillOpacity:0.6
+      });
+
+      const timeMs = toMs(f.time);
+      const srcs = Array.isArray(f.sources) ? f.sources.join(', ') : (f._src || '—');
+
+      marker.bindPopup(
+        `<b>Brightness:</b> ${f.brightness ?? '—'}<br/>
+         <b>Confidence:</b> ${f.confidence ?? '—'}<br/>
+         <b>Time:</b> ${fmtTime(timeMs)}<br/>
+         <b>Sources:</b> ${srcs}${f.satellite ? `<br/><b>Sat:</b> ${f.satellite}`:''}`
+      );
+      marker.addTo(firesLayer);
+    }
+  }
+
+  function applyFilters() {
+    const days = Number(timeRange.value);
+    const minMag = Number(minMagSel.value);
+    const cutoff = cutoffMs(days);
+
+    _quakesFiltered = _quakesRaw.filter(e => {
+      const t = toMs(e.time);
+      const m = Number(e.mag) || 0;
+      return t >= cutoff && m >= minMag;
+    });
+
+    _firesFiltered = _firesRaw.filter(f => toMs(f.time) >= cutoff);
+
+    quakesLayer.clearLayers();
+    firesLayer.clearLayers();
+    drawQuakes(_quakesFiltered);
+    drawFires(_firesFiltered);
+    updateStats();
+  }
+
+  async function refresh(force = false) {
+    const days = Number(timeRange.value);
+    const minMag = Number(minMagSel.value);
+
+    // Build URLs with explicit params so time range ALWAYS flows through.
+    // Adding a small cache-buster when "force" to bypass any browser cache layer.
+    const buster = force ? `&t=${Date.now()}` : '';
+    const quakesUrl = `${API_BASE}/api/earthquakes?days=${days}&minMag=${minMag}${buster}`;
+    const firesUrl  = `${API_BASE}/api/fires?days=${days}${buster}`;
+
+    try {
+      const [q, f] = await Promise.all([
+        fetchJSON(quakesUrl),
+        fetchJSON(firesUrl)
+      ]);
+
+      // Worker payloads: { ok, count, data:[...] }
+      _quakesRaw = Array.isArray(q?.data) ? q.data : [];
+      _firesRaw  = Array.isArray(f?.data) ? f.data : [];
+
+      applyFilters(); // client-side cutoff too (defensive & instant UI)
+    } catch (err) {
+      console.error('Fetch error:', err);
+      // Keep existing layers, but update timestamp so you see an attempt happened
+      lastUpdated.textContent = new Date().toLocaleTimeString([], { hour12:false });
+    }
+  }
+
+  // Initial load + auto-refresh every 10 minutes
+  refresh(true);
+  setInterval(() => refresh(false), 10 * 60 * 1000);
+
+  // Fit bounds to Greece on first interaction
+  map.fitBounds([[GRC_BBOX.south, GRC_BBOX.west],[GRC_BBOX.north, GRC_BBOX.east]]);
 </script>
 </body>
 </html>
