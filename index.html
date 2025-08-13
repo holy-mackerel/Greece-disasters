@@ -135,9 +135,7 @@
     <!-- Data sources with status bullets -->
     <div class="sources">
       <h3>Data sources</h3>
-      <ul id="source-list">
-        <!-- filled by JS -->
-      </ul>
+      <ul id="source-list"></ul>
       <div class="legend">
         <div><span class="status-dot ok"></span>Source contributed data</div>
         <div><span class="status-dot err"></span>No data from source</div>
@@ -154,10 +152,7 @@
 
 <script>
   // ================== CONFIG ==================
-  // Your Worker base URL (no trailing slash)
-  const API_BASE = 'https://greece-disasters.odysseas-3d2.workers.dev';
-
-  // Greece bbox for Leaflet fit
+  const API_BASE = 'https://greece-disasters.odysseas-3d2.workers.dev'; // no trailing slash
   const GRC_BBOX = { south:34.8, north:41.8, west:19.3, east:29.6 };
   // ============================================
 
@@ -165,11 +160,7 @@
   const map = L.map('map', { zoomSnap: 0.25 });
   const center = [(GRC_BBOX.south + GRC_BBOX.north)/2, (GRC_BBOX.west + GRC_BBOX.east)/2];
   map.setView(center, 6.25);
-
-  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '&copy; OpenStreetMap contributors'
-  }).addTo(map);
-
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
   const quakesLayer = L.layerGroup().addTo(map);
   const firesLayer  = L.layerGroup().addTo(map);
 
@@ -204,26 +195,21 @@
     const parsed = Date.parse(t);
     return Number.isFinite(parsed) ? parsed : 0;
   }
-
-  function cutoffMs(days) {
-    return Date.now() - Number(days) * 24 * 60 * 60 * 1000;
-  }
-
-  function withinGreece(lat, lon) {
-    return lat >= GRC_BBOX.south && lat <= GRC_BBOX.north && lon >= GRC_BBOX.west && lon <= GRC_BBOX.east;
-  }
-
+  function cutoffMs(days) { return Date.now() - Number(days) * 24 * 60 * 60 * 1000; }
+  function withinGreece(lat, lon) { return lat >= GRC_BBOX.south && lat <= GRC_BBOX.north && lon >= GRC_BBOX.west && lon <= GRC_BBOX.east; }
   async function fetchJSON(url) {
-    const res = await fetch(url, { cache: 'no-store' });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return res.json();
+    const ctrl = new AbortController();
+    const t = setTimeout(()=>ctrl.abort(), 15000);
+    try{
+      const res = await fetch(url, { cache: 'no-store', signal: ctrl.signal });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    } finally { clearTimeout(t); }
   }
-
   function fmtTime(ms) {
     const d = new Date(ms);
     return d.toLocaleString([], { hour12:false });
   }
-
   function quakeColor(m) {
     const clamped = Math.max(2, Math.min(6.5, m || 0));
     const t = (clamped - 2) / 4.5; // 0..1
@@ -231,27 +217,19 @@
     const g = Math.round(200 * (1 - t) + 40 * t);
     return `rgb(${r},${g},0)`;
   }
-
-  function quakeRadius(m) {
-    return 6 + Math.pow(Math.max(0, m), 1.6); // a bit larger for label
-  }
-
-  function fireColor(verified) {
-    return verified ? '#ff3b3b' : '#ffb347';
-  }
-
+  function quakeRadius(m) { return 6 + Math.pow(Math.max(0, m), 1.6); } // larger for label
+  function fireColor(verified) { return verified ? '#ff3b3b' : '#ffb347'; }
   function fireRadius(brightness) {
     const b = Number(brightness) || 0;
     return 4 + Math.min(10, (b - 300) / 8);
   }
-
-  function updateStats() {
+  function updateStats(updatedISO) {
     const q = _quakesFiltered.length;
     const f = _firesFiltered.length;
     statQuakes.textContent = q.toLocaleString();
     statFires.textContent  = f.toLocaleString();
     statTotal.textContent  = (q + f).toLocaleString();
-    lastUpdated.textContent = new Date().toLocaleTimeString([], { hour12:false });
+    lastUpdated.textContent = updatedISO ? new Date(updatedISO).toLocaleTimeString([], { hour12:false }) : new Date().toLocaleTimeString([], { hour12:false });
   }
 
   // --------- Custom quake marker with magnitude label ----------
@@ -259,7 +237,7 @@
     const m = Number(mag) || 0;
     const size = Math.round(quakeRadius(m) * 2);     // px
     const color = quakeColor(m);
-    const font = 10; // px as requested
+    const font = 10; // px
     const style = `
       width:${size}px;height:${size}px;
       border-radius:50%;
@@ -329,28 +307,25 @@
 
   // Build "did this source contribute data?" map for UI bullets
   function updateSourcesUI() {
-    // Normalize names we display
     const sourceKeys = [
       {key:'USGS', label:'USGS (Earthquakes)'},
       {key:'EMSC', label:'EMSC (Earthquakes)'},
       {key:'NOA',  label:'NOA (Earthquakes)'},
-      {key:'FIRMS', label:'NASA FIRMS (Fires)'},     // aggregate of VIIRS/MODIS below
+      {key:'FIRMS', label:'NASA FIRMS (Fires)'},
       {key:'EFFIS', label:'EFFIS (Fires)'}
     ];
 
-    // Scan filtered data for contributions
     const contributed = {};
     for (const e of _quakesFiltered) {
       const ss = Array.isArray(e.sources) ? e.sources : [e._src].filter(Boolean);
-      if (ss.includes('USGS')) contributed['USGS'] = true;
-      if (ss.includes('EMSC')) contributed['EMSC'] = true;
-      if (ss.includes('NOA'))  contributed['NOA']  = true;
+      if (ss?.includes('USGS')) contributed['USGS'] = true;
+      if (ss?.includes('EMSC')) contributed['EMSC'] = true;
+      if (ss?.includes('NOA'))  contributed['NOA']  = true;
     }
     for (const f of _firesFiltered) {
       const ss = Array.isArray(f.sources) ? f.sources : [f._src].filter(Boolean);
-      // Any VIIRS/MODIS implies FIRMS feed contributed
-      if (ss.some(s => /VIIRS|MODIS/i.test(s))) contributed['FIRMS'] = true;
-      if (ss.includes('EFFIS')) contributed['EFFIS'] = true;
+      if (ss?.some(s => /VIIRS|MODIS|FIRMS/i.test(s))) contributed['FIRMS'] = true;
+      if (ss?.includes('EFFIS')) contributed['EFFIS'] = true;
     }
 
     sourceList.innerHTML = '';
@@ -363,13 +338,12 @@
       txt.textContent = label;
       const tail = document.createElement('small');
       tail.textContent = ok ? 'data present' : 'no data';
-
       li.appendChild(dot); li.appendChild(txt); li.appendChild(tail);
       sourceList.appendChild(li);
     }
   }
 
-  function applyFilters() {
+  function applyFilters(apiUpdatedISO) {
     const days = Number(timeRange.value);
     const minMag = Number(minMagSel.value);
     const cutoff = cutoffMs(days);
@@ -386,27 +360,45 @@
     firesLayer.clearLayers();
     drawQuakes(_quakesFiltered);
     drawFires(_firesFiltered);
-    updateStats();
+    updateStats(apiUpdatedISO);
     updateSourcesUI();
   }
 
   async function refresh(force = false) {
     const days = Number(timeRange.value);
+    const hours = days * 24;
     const minMag = Number(minMagSel.value);
     const buster = force ? `&t=${Date.now()}` : '';
-    const quakesUrl = `${API_BASE}/api/earthquakes?days=${days}&minMag=${minMag}${buster}`;
-    const firesUrl  = `${API_BASE}/api/fires?days=${days}${buster}`;
+
+    // NOTE: Worker expects /earthquakes and /fires with ?hours=
+    const quakesUrl = `${API_BASE}/earthquakes?hours=${hours}&minMag=${minMag}&minmag=${minMag}${buster}`;
+    const firesUrl  = `${API_BASE}/fires?hours=${hours}${buster}`;
 
     try {
-      const [q, f] = await Promise.allSettled([ fetchJSON(quakesUrl), fetchJSON(firesUrl) ]);
+      const [qRes, fRes] = await Promise.allSettled([ fetchJSON(quakesUrl), fetchJSON(firesUrl) ]);
 
-      if (q.status === 'fulfilled') _quakesRaw = Array.isArray(q.value?.data) ? q.value.data : [];
-      if (f.status === 'fulfilled') _firesRaw  = Array.isArray(f.value?.data) ? f.value.data : [];
+      let updatedISO = null;
 
-      applyFilters();
+      if (qRes.status === 'fulfilled') {
+        const q = qRes.value || {};
+        _quakesRaw = Array.isArray(q.data) ? q.data : [];
+        if (!updatedISO && q.updated) updatedISO = q.updated;
+      } else {
+        _quakesRaw = [];
+      }
+
+      if (fRes.status === 'fulfilled') {
+        const f = fRes.value || {};
+        _firesRaw = Array.isArray(f.data) ? f.data : [];
+        if (!updatedISO && f.updated) updatedISO = f.updated;
+      } else {
+        _firesRaw = [];
+      }
+
+      applyFilters(updatedISO);
     } catch (err) {
       console.error('Fetch error:', err);
-      lastUpdated.textContent = new Date().toLocaleTimeString([], { hour12:false });
+      updateStats(); // fallback to local time
     }
   }
 
