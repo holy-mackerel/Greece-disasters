@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Greece Disasters – API Test</title>
+<style>
+  :root { --bg:#0f1720; --panel:#121c26; --txt:#e8f0f6; --muted:#9bb0c2; --ok:#3dd87e; --err:#ff6b6b; }
+  html,body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;}
+  .wrap{max-width:900px;margin:24px auto;padding:0 16px;}
+  .card{background:var(--panel);border:1px solid #0b141c;border-radius:10px;padding:16px;margin:12px 0;}
+  h1{font-size:20px;margin:0 0 8px}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  input,select,button{background:#0a141c;color:var(--txt);border:1px solid #0b141c;border-radius:8px;padding:8px 10px}
+  button{cursor:pointer}
+  .mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;white-space:pre-wrap}
+  .muted{color:var(--muted)}
+  .ok{color:var(--ok)} .err{color:var(--err)}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media (max-width:800px){.grid{grid-template-columns:1fr}}
+  .small{font-size:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Greece Disasters — API Test</h1>
+
+  <div class="card">
+    <div class="row">
+      <label>Worker base:</label>
+      <input id="apiBase" size="50" value="https://greece-disasters.odysseas-3d2.workers.dev" />
+      <button id="ping">Health</button>
+    </div>
+    <div id="health" class="small muted" style="margin-top:8px"></div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h3>Earthquakes</h3>
+      <div class="row small">
+        <label>Days <input id="qDays" type="number" min="1" max="365" value="7"></label>
+        <label>Min M <input id="qMinMag" type="number" min="0" step="0.1" value="2"></label>
+        <button id="btnQuakes">Fetch</button>
+      </div>
+      <div id="qMeta" class="small muted" style="margin:6px 0"></div>
+      <div id="qOut" class="mono"></div>
+    </div>
+
+    <div class="card">
+      <h3>Fires</h3>
+      <div class="row small">
+        <label>Days <input id="fDays" type="number" min="1" max="10" value="1"></label>
+        <label>Min confidence <input id="fConf" type="number" min="0" max="100" value="60"></label>
+        <label>Min FRP <input id="fFrp" type="number" min="0" step="1" value="0"></label>
+        <button id="btnFires">Fetch</button>
+      </div>
+      <div id="fMeta" class="small muted" style="margin:6px 0"></div>
+      <div id="fOut" class="mono"></div>
+    </div>
+  </div>
+
+  <div class="card small muted">
+    Tips: this page calls your Worker endpoints and shows timing + the first few rows.
+    If counts look right here but not on the map, the issue is frontend rendering, not the Worker.
+  </div>
+</div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const apiBase = $('#apiBase');
+
+$('#ping').onclick = async () => {
+  const t0 = performance.now();
+  try{
+    const r = await fetch(apiBase.value.replace(/\/+$/,'') + '/health', {cache:'no-store'});
+    const j = await r.json();
+    const ms = (performance.now()-t0).toFixed(0);
+    $('#health').innerHTML = r.ok
+      ? `<span class="ok">OK</span> • ${ms} ms • ${j.ts}`
+      : `<span class="err">HTTP ${r.status}</span> • ${ms} ms`;
+  }catch(e){
+    $('#health').innerHTML = `<span class="err">Error:</span> ${e}`;
+  }
+};
+
+$('#btnQuakes').onclick = async () => {
+  const base = apiBase.value.replace(/\/+$/,'');
+  const days = +$('#qDays').value || 7;
+  const minmag = +$('#qMinMag').value || 2;
+  const url = `${base}/api/earthquakes?days=${days}&minmag=${minmag}`;
+  await run(url, '#qMeta', '#qOut', formatQuakes);
+};
+
+$('#btnFires').onclick = async () => {
+  const base = apiBase.value.replace(/\/+$/,'');
+  const days = +$('#fDays').value || 1;
+  const conf = +$('#fConf').value || 0;
+  const frp = +$('#fFrp').value || 0;
+  const url = `${base}/api/fires?days=${days}&minconfidence=${conf}&minfrp=${frp}`;
+  await run(url, '#fMeta', '#fOut', formatFires);
+};
+
+async function run(url, metaSel, outSel, formatter){
+  const meta = $(metaSel), out = $(outSel);
+  out.textContent = '';
+  meta.textContent = 'Loading…';
+  const t0 = performance.now();
+  try{
+    const r = await fetch(url, {cache:'no-store'});
+    const ms = (performance.now()-t0).toFixed(0);
+    const j = await r.json();
+    meta.innerHTML = `${escapeHtml(url)}<br>${r.ok ? '<span class="ok">OK</span>' : '<span class="err">HTTP '+r.status+'</span>'} • ${ms} ms • updated: ${j.updated || '—'} • count: ${j.count}`;
+    out.textContent = formatter(j);
+  }catch(e){
+    meta.innerHTML = `<span class="err">Error:</span> ${escapeHtml(String(e))}`;
+  }
+}
+
+function formatQuakes(j){
+  if (!j || !Array.isArray(j.data)) return 'No data';
+  const first = j.data.slice(0, 10).map(x =>
+    `M${(x.mag??'?').toFixed?x.mag.toFixed(1):x.mag}  `+
+    `${pad(x.lat)},${pad(x.lon)}  `+
+    `${new Date(x.time).toISOString()}  `+
+    `${x.place||''}`
+  );
+  return `${first.join('\n')}\n${j.data.length>10?'…':''}`;
+}
+
+function formatFires(j){
+  if (!j || !Array.isArray(j.data)) return 'No data';
+  const first = j.data.slice(0, 10).map(x =>
+    `${pad(x.lat)},${pad(x.lon)}  br:${num(x.brightness)}  frp:${num(x.frp)}  conf:${num(x.confidence)}  `+
+    `${new Date(x.time).toISOString()}  ${x._src||''}`
+  );
+  return `${first.join('\n')}\n${j.data.length>10?'…':''}`;
+}
+
+const pad = (n)=> (Number(n).toFixed?Number(n).toFixed(3):n);
+const num = (n)=> (Number(n).toFixed?Number(n).toFixed(1):n);
+function escapeHtml(s){return s.replace(/[&<>"']/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]))}
+</script>
+</body>
+</html>
