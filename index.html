@@ -76,6 +76,9 @@
     /* Leaflet tweaks */
     .leaflet-control-zoom a { background:#0a141c; color:#fff; border:none; }
     .leaflet-control-zoom a:hover { background:#13202b; }
+
+    /* Small status line */
+    #render-status { font-size:12px; color:var(--muted); margin-top:6px; min-height:16px; }
   </style>
 </head>
 <body>
@@ -100,6 +103,7 @@
     </div>
 
     <div class="row updated">Last updated: <span id="last-updated">—</span></div>
+    <div id="render-status"></div>
 
     <div class="divider"></div>
 
@@ -135,9 +139,7 @@
     <!-- Data sources with status bullets -->
     <div class="sources">
       <h3>Data sources</h3>
-      <ul id="source-list">
-        <!-- filled by JS -->
-      </ul>
+      <ul id="source-list"></ul>
       <div class="legend">
         <div><span class="status-dot ok"></span>Source contributed data</div>
         <div><span class="status-dot err"></span>No data from source</div>
@@ -154,22 +156,28 @@
 
 <script>
   // ================== CONFIG ==================
-  // Worker base URL (no trailing slash)
   const API_BASE = 'https://greece-disasters.odysseas-3d2.workers.dev';
-  // Greece bbox
   const GRC_BBOX = { south:34.8, north:41.8, west:19.3, east:29.6 };
+
+  // Performance knobs (do NOT change UI)
+  const FIRE_BATCH = 600;          // draw in chunks
+  const FIRE_HARD_CAP = 6000;      // max to render (avoid UI lock with 6k+ points)
+  const DEFAULT_FIRE_CONF = 60;    // default server-side filter to keep map usable
+  const DEFAULT_FIRE_FRP  = 5;
+
   // ============================================
 
-  // Map (canvas renderer for speed)
+  // Map
   const map = L.map('map', { zoomSnap: 0.25, preferCanvas: true });
   const center = [(GRC_BBOX.south + GRC_BBOX.north)/2, (GRC_BBOX.west + GRC_BBOX.east)/2];
   map.setView(center, 6.25);
 
   L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '&copy; OpenStreetMap contributors',
-    updateWhenZooming: false,
-    updateWhenIdle: true
+    attribution: '&copy; OpenStreetMap contributors'
   }).addTo(map);
+
+  // Use a shared Canvas renderer for speed
+  const canvasRenderer = L.canvas({ padding: 0.2 });
 
   const quakesLayer = L.layerGroup().addTo(map);
   const firesLayer  = L.layerGroup().addTo(map);
@@ -181,6 +189,7 @@
   const statTotal  = $('#stat-total');
   const lastUpdated = $('#last-updated');
   const sourceList = $('#source-list');
+  const renderStatus = $('#render-status');
 
   // Inputs
   const showQuakes = $('#show-quakes');
@@ -190,7 +199,7 @@
   const btnRefresh = $('#btn-refresh');
 
   showQuakes.addEventListener('change', () => { quakesLayer.clearLayers(); drawQuakes(_quakesFiltered); if (!showQuakes.checked) quakesLayer.clearLayers(); });
-  showFires.addEventListener('change',  () => { firesLayer.clearLayers();  drawFires(_firesFiltered);   if (!showFires.checked)  firesLayer.clearLayers();  });
+  showFires.addEventListener('change',  () => { firesLayer.clearLayers();  drawFiresIncremental(_firesFiltered); if (!showFires.checked) firesLayer.clearLayers(); });
 
   timeRange.addEventListener('change', () => refresh(true));
   minMagSel.addEventListener('change', () => refresh(true));
@@ -205,41 +214,33 @@
     const parsed = Date.parse(t);
     return Number.isFinite(parsed) ? parsed : 0;
   }
-  function cutoffMs(days) {
-    return Date.now() - Number(days) * 24 * 60 * 60 * 1000;
-  }
+  function cutoffMs(days) { return Date.now() - Number(days) * 24 * 60 * 60 * 1000; }
   function withinGreece(lat, lon) {
     return lat >= GRC_BBOX.south && lat <= GRC_BBOX.north && lon >= GRC_BBOX.west && lon <= GRC_BBOX.east;
   }
-  async function fetchJSON(url) {
-    const res = await fetch(url, { cache: 'no-store' });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return res.json();
+  async function fetchJSON(url, timeoutMs = 20000) {
+    const ac = new AbortController();
+    const id = setTimeout(() => ac.abort('timeout'), timeoutMs);
+    try {
+      const res = await fetch(url, { cache: 'no-store', signal: ac.signal });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    } finally { clearTimeout(id); }
   }
-  function fmtTime(ms) {
-    const d = new Date(ms);
-    return d.toLocaleString([], { hour12:false });
-  }
-
-  // ---- styling helpers ----
+  function fmtTime(ms) { const d = new Date(ms); return d.toLocaleString([], { hour12:false }); }
   function quakeColor(m) {
     const clamped = Math.max(2, Math.min(6.5, m || 0));
-    const t = (clamped - 2) / 4.5; // 0..1
+    const t = (clamped - 2) / 4.5;
     const r = Math.round(255 * t);
     const g = Math.round(200 * (1 - t) + 40 * t);
     return `rgb(${r},${g},0)`;
   }
-  function quakeRadius(m) {
-    return 6 + Math.pow(Math.max(0, m), 1.6); // larger to fit label
-  }
-  function fireColor(verified) {
-    return verified ? '#ff3b3b' : '#ffb347';
-  }
+  function quakeRadius(m) { return 6 + Math.pow(Math.max(0, m), 1.6); }
+  function fireColor(verified) { return verified ? '#ff3b3b' : '#ffb347'; }
   function fireRadius(brightness) {
     const b = Number(brightness) || 0;
     return 4 + Math.min(10, (b - 300) / 8);
   }
-
   function updateStats() {
     const q = _quakesFiltered.length;
     const f = _firesFiltered.length;
@@ -252,9 +253,9 @@
   // --------- Custom quake marker with magnitude label ----------
   function makeQuakeIcon(mag) {
     const m = Number(mag) || 0;
-    const size = Math.round(quakeRadius(m) * 2);     // px
+    const size = Math.round(quakeRadius(m) * 2);
     const color = quakeColor(m);
-    const font = 10; // px as requested
+    const font = 10; // px
     const style = `
       width:${size}px;height:${size}px;
       border-radius:50%;
@@ -268,27 +269,14 @@
     const html = `<div style="${style}">${m.toFixed(1)}</div>`;
     return L.divIcon({ html, className:'', iconSize:[size,size], iconAnchor:[size/2,size/2] });
   }
-  // ------------------------------------------------------------
-
-  // ---- batched rendering to keep UI responsive ----
-  async function addInBatches(layer, items, makeMarker, batch=250) {
-    for (let i=0; i<items.length; i+=batch) {
-      const slice = items.slice(i, i+batch);
-      for (const it of slice) {
-        const mk = makeMarker(it);
-        if (mk) mk.addTo(layer);
-      }
-      // yield to the browser so it can paint
-      await new Promise(r => requestAnimationFrame(r));
-    }
-  }
 
   function drawQuakes(quakes) {
     if (!showQuakes.checked) return;
-    const inBox = quakes.filter(({lat,lon}) => withinGreece(lat,lon));
-    return addInBatches(quakesLayer, inBox, e => {
+    for (const e of quakes) {
+      const { lat, lon } = e;
+      if (!withinGreece(lat, lon)) continue;
       const mag = Number(e.mag) || 0;
-      const marker = L.marker([e.lat, e.lon], { icon: makeQuakeIcon(mag) });
+      const marker = L.marker([lat, lon], { icon: makeQuakeIcon(mag) });
       const timeMs = toMs(e.time);
       const place = e.place || '—';
       const depth = (e.depth ?? '—');
@@ -301,29 +289,61 @@
          <b>Place:</b> ${place}<br/>
          <b>Sources:</b> ${srcs}${link}`
       );
-      return marker;
-    });
+      marker.addTo(quakesLayer);
+    }
   }
 
-  function drawFires(fires) {
+  // ---- Incremental, Canvas-accelerated fire rendering ----
+  function drawFiresIncremental(fires) {
     if (!showFires.checked) return;
-    const inBox = fires.filter(({lat,lon}) => withinGreece(lat,lon));
-    return addInBatches(firesLayer, inBox, f => {
-      const color = fireColor(!!f.verified);
-      const radius = Math.max(3, fireRadius(f.brightness));
-      const marker = L.circleMarker([f.lat, f.lon], {
-        radius, color, weight:1, fillColor: color, fillOpacity:0.6
-      });
-      const timeMs = toMs(f.time);
-      const srcs = Array.isArray(f.sources) ? f.sources.join(', ') : (f._src || '—');
-      marker.bindPopup(
-        `<b>Brightness:</b> ${f.brightness ?? '—'}<br/>
-         <b>Confidence:</b> ${f.confidence ?? '—'}<br/>
-         <b>Time:</b> ${fmtTime(timeMs)}<br/>
-         <b>Sources:</b> ${srcs}${f.satellite ? `<br/><b>Sat:</b> ${f.satellite}`:''}`
-      );
-      return marker;
-    });
+    renderStatus.textContent = '';
+    const n = fires.length;
+    if (n === 0) return;
+
+    let list = fires.filter(f => withinGreece(f.lat, f.lon));
+
+    // Hard cap to avoid UI lock if API returns 6k+ points
+    let capped = false;
+    if (list.length > FIRE_HARD_CAP) {
+      list = list.slice(0, FIRE_HARD_CAP);
+      capped = true;
+    }
+
+    const total = list.length;
+    let i = 0;
+
+    function step() {
+      const end = Math.min(i + FIRE_BATCH, total);
+      for (; i < end; i++) {
+        const f = list[i];
+        const color = fireColor(!!f.verified);
+        const radius = Math.max(3, fireRadius(f.brightness));
+        L.circleMarker([f.lat, f.lon], {
+          renderer: canvasRenderer,
+          radius, color, weight:1, fillColor: color, fillOpacity:0.6
+        }).bindPopup(
+          `<b>Brightness:</b> ${f.brightness ?? '—'}<br/>
+           <b>FRP:</b> ${f.frp ?? '—'}<br/>
+           <b>Confidence:</b> ${f.confidence ?? '—'}<br/>
+           <b>Time:</b> ${fmtTime(toMs(f.time))}<br/>
+           <b>Sources:</b> ${(Array.isArray(f.sources) ? f.sources.join(', ') : (f._src || '—'))}
+          `
+        ).addTo(firesLayer);
+      }
+      renderStatus.textContent = `Rendering fires: ${end.toLocaleString()} / ${total.toLocaleString()}${capped ? ' (capped)' : ''}`;
+      if (i < total) {
+        // Yield back to UI; prefer idle if available
+        if ('requestIdleCallback' in window) {
+          requestIdleCallback(step, { timeout: 200 });
+        } else {
+          setTimeout(step, 0);
+        }
+      } else {
+        // done
+        setTimeout(() => { renderStatus.textContent = ''; }, 800);
+      }
+    }
+    step();
   }
 
   // Build "did this source contribute data?" map for UI bullets
@@ -335,7 +355,6 @@
       {key:'FIRMS', label:'NASA FIRMS (Fires)'},
       {key:'EFFIS', label:'EFFIS (Fires)'}
     ];
-
     const contributed = {};
     for (const e of _quakesFiltered) {
       const ss = Array.isArray(e.sources) ? e.sources : [e._src].filter(Boolean);
@@ -348,7 +367,6 @@
       if (ss.some(s => /VIIRS|MODIS/i.test(s))) contributed['FIRMS'] = true;
       if (ss.includes('EFFIS')) contributed['EFFIS'] = true;
     }
-
     sourceList.innerHTML = '';
     for (const {key,label} of sourceKeys) {
       const ok = !!contributed[key];
@@ -372,23 +390,17 @@
     _quakesFiltered = _quakesRaw.filter(e => {
       const t = toMs(e.time);
       const m = Number(e.mag) || 0;
-      return t >= cutoff && m >= minMag;
+      return t >= cutoff && m >= minMag && withinGreece(e.lat, e.lon);
     });
 
-    _firesFiltered = _firesRaw.filter(f => toMs(f.time) >= cutoff);
+    _firesFiltered = _firesRaw.filter(f => toMs(f.time) >= cutoff && withinGreece(f.lat, f.lon));
 
     quakesLayer.clearLayers();
     firesLayer.clearLayers();
-    // draw asynchronously (don’t block UI)
-    Promise.resolve().then(() => drawQuakes(_quakesFiltered));
-    Promise.resolve().then(() => drawFires(_firesFiltered));
-
+    drawQuakes(_quakesFiltered);
+    drawFiresIncremental(_firesFiltered);
     updateStats();
     updateSourcesUI();
-  }
-
-  function qs(obj) {
-    return Object.entries(obj).map(([k,v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&');
   }
 
   async function refresh(force = false) {
@@ -396,36 +408,23 @@
     const minMag = Number(minMagSel.value);
     const buster = force ? `&t=${Date.now()}` : '';
 
-    // Use hours for finer control on the worker
-    const hours = days * 24;
-
-    // Fire filters (reasonable defaults to avoid rendering thousands on 24h)
-    const fireParams = { hours, minconfidence: 50, minfrp: 1 };
-
-    const quakesUrl = `${API_BASE}/earthquakes?${qs({ hours, minmag: minMag })}${buster}`;
-    const firesUrl  = `${API_BASE}/fires?${qs(fireParams)}${buster}`;
+    // Default-fire filters to avoid 6k+ points freezing UI.
+    const firesUrl  = `${API_BASE}/fires?days=${days}&minconfidence=${DEFAULT_FIRE_CONF}&minfrp=${DEFAULT_FIRE_FRP}${buster}`;
+    const quakesUrl = `${API_BASE}/earthquakes?days=${days}&minmag=${minMag}${buster}`;
 
     try {
-      const [q, f] = await Promise.allSettled([ fetchJSON(quakesUrl), fetchJSON(firesUrl) ]);
+      renderStatus.textContent = 'Loading…';
+      const [q, f] = await Promise.allSettled([ fetchJSON(quakesUrl, 25000), fetchJSON(firesUrl, 30000) ]);
 
-      if (q.status === 'fulfilled') {
-        _quakesRaw = Array.isArray(q.value?.data) ? q.value.data : [];
-      } else {
-        _quakesRaw = [];
-        console.error('Quakes fetch error:', q.reason);
-      }
-
-      if (f.status === 'fulfilled') {
-        _firesRaw  = Array.isArray(f.value?.data) ? f.value.data : [];
-      } else {
-        _firesRaw = [];
-        console.error('Fires fetch error:', f.reason);
-      }
+      if (q.status === 'fulfilled') _quakesRaw = Array.isArray(q.value?.data) ? q.value.data : [];
+      if (f.status === 'fulfilled') _firesRaw  = Array.isArray(f.value?.data) ? f.value.data : [];
 
       applyFilters();
     } catch (err) {
       console.error('Fetch error:', err);
       lastUpdated.textContent = new Date().toLocaleTimeString([], { hour12:false });
+      renderStatus.textContent = 'Load error';
+      setTimeout(() => { renderStatus.textContent = ''; }, 2500);
     }
   }
 
